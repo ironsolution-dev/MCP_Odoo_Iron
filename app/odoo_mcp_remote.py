@@ -53,29 +53,47 @@ def load() -> None:
 # ---------------------------------------------------------------------------
 class BearerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, req: Request, call_next):
-        if req.method == 'POST' and req.url.path.startswith('/mcp'):
-            auth  = req.headers.get('authorization', '')
-            token, src = AuthMiddleware.extract_token(auth, str(req.url.path))
-            actor = _registry.verify(token) if _registry else None
-            if not actor:
-                if _mw:
-                    _mw.audit.emit(
-                        allowed=False,
-                        denied_reason='invalid_token',
-                        client_type=AuthMiddleware.detect_client_type(
-                            req.headers.get('user-agent', ''), src),
-                    )
+        if not req.url.path.startswith('/mcp'):
+            return await call_next(req)
+
+        # GET sin Accept: text/event-stream — ChatGPT preflight/discovery.
+        # FastMCP devolveria 406; interceptamos y retornamos 200 JSON basico.
+        if req.method == 'GET':
+            accept = req.headers.get('accept', '')
+            if 'text/event-stream' not in accept:
                 return JSONResponse(
-                    {'jsonrpc': '2.0', 'id': None,
-                     'error': {'code': -32001, 'message': 'Unauthorized: invalid_token'}},
-                    status_code=401,
+                    {'jsonrpc': '2.0', 'result': {'name': 'odoo-mcp-v2', 'version': '0.1.0'}},
+                    status_code=200,
                 )
-            tok = _actor.set(actor)
-            try:
-                return await call_next(req)
-            finally:
-                _actor.reset(tok)
-        return await call_next(req)
+            # SSE legitimo — pasa sin auth (Claude.ai abre el stream antes del tool call)
+            return await call_next(req)
+
+        # POST — requiere autenticacion.
+        # Acepta Authorization: Bearer (Claude.ai) o X-Api-Key (ChatGPT API key mode).
+        auth      = req.headers.get('authorization', '')
+        x_api_key = req.headers.get('x-api-key', '') or req.headers.get('X-Api-Key', '')
+        ua        = req.headers.get('user-agent', '')
+        token, src = AuthMiddleware.extract_token(auth, str(req.url.path), x_api_key)
+        actor = _registry.verify(token) if _registry else None
+
+        if not actor:
+            if _mw:
+                _mw.audit.emit(
+                    allowed=False,
+                    denied_reason='invalid_token',
+                    client_type=AuthMiddleware.detect_client_type(ua, src),
+                )
+            return JSONResponse(
+                {'jsonrpc': '2.0', 'id': None,
+                 'error': {'code': -32001, 'message': 'Unauthorized: invalid_token'}},
+                status_code=401,
+            )
+
+        tok = _actor.set(actor)
+        try:
+            return await call_next(req)
+        finally:
+            _actor.reset(tok)
 
 
 def _a() -> ActorEntry:

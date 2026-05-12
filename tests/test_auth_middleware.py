@@ -34,6 +34,30 @@ def test_extract_bearer_token(middleware):
     assert source == "bearer"
 
 
+def test_extract_x_api_key(middleware):
+    """ChatGPT envia X-Api-Key en vez de Authorization: Bearer."""
+    mw, _ = middleware
+    token, source = mw.extract_token(None, path="/mcp", x_api_key="mcp_chatgpt_token_xxx")
+    assert token == "mcp_chatgpt_token_xxx"
+    assert source == "x_api_key"
+
+
+def test_extract_bearer_takes_priority_over_x_api_key(middleware):
+    """Si vienen ambos headers, Bearer gana."""
+    mw, _ = middleware
+    token, source = mw.extract_token("Bearer mcp_bearer_wins", "/mcp", "mcp_api_key_loses")
+    assert token == "mcp_bearer_wins"
+    assert source == "bearer"
+
+
+def test_extract_x_api_key_ignores_non_mcp_prefix(middleware):
+    """X-Api-Key sin prefijo mcp_ no se acepta (podria ser otra API key ajena)."""
+    mw, _ = middleware
+    token, source = mw.extract_token(None, "/mcp", "sk-openai-xxxx")
+    assert token is None
+    assert source == "none"
+
+
 def test_extract_path_token(middleware):
     mw, _ = middleware
     token, source = mw.extract_token(None, path="/mcp/opaque_segment_here/")
@@ -54,6 +78,8 @@ def test_detect_client_type(middleware):
     assert mw.detect_client_type("ChatGPT-User/1.0", "bearer") == "chatgpt_connector"
     assert mw.detect_client_type("curl/8.0", "bearer") == "curl"
     assert mw.detect_client_type(None, "path") == "opaque_path"
+    # X-Api-Key source siempre es chatgpt_connector sin importar user-agent
+    assert mw.detect_client_type(None, "x_api_key") == "chatgpt_connector"
 
 
 def test_invalid_token_raises_auth_error_and_audits(middleware):

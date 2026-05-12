@@ -72,13 +72,25 @@ class AuthMiddleware:
 
     @staticmethod
     def extract_token(
-        authorization_header: Optional[str], path: Optional[str]
+        authorization_header: Optional[str],
+        path: Optional[str],
+        x_api_key: Optional[str] = None,
     ) -> tuple[Optional[str], str]:
-        """Retorna (token, source) donde source ∈ {bearer, path, none}."""
+        """Retorna (token, source) donde source ∈ {bearer, x_api_key, path, none}.
+
+        Orden de prioridad:
+        1. Authorization: Bearer <token>   — Claude.ai y modo preferido
+        2. X-Api-Key: <token>              — ChatGPT custom connector (API Key mode)
+        3. /mcp/<opaque_token> en path     — fallback para conectores sin header
+        """
         if authorization_header:
             m = _BEARER_RE.match(authorization_header.strip())
             if m:
                 return m.group(1), "bearer"
+        if x_api_key and x_api_key.strip():
+            token = x_api_key.strip()
+            if token.startswith("mcp_"):
+                return token, "x_api_key"
         if path:
             m = _PATH_TOKEN_RE.match(path)
             if m:
@@ -91,6 +103,8 @@ class AuthMiddleware:
         if "claude" in ua:
             return "claude_connector"
         if "chatgpt" in ua or "openai" in ua:
+            return "chatgpt_connector"
+        if source == "x_api_key":
             return "chatgpt_connector"
         if "curl" in ua:
             return "curl"
