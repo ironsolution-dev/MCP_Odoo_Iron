@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP, Context
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.audit import Audit
 from app.auth_middleware import AuthMiddleware
@@ -49,31 +49,58 @@ def load() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Middleware Bearer
+# Middleware ASGI puro — permite reescribir el path antes de FastMCP
 # ---------------------------------------------------------------------------
-class BearerMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, req: Request, call_next):
-        if not req.url.path.startswith('/mcp'):
-            return await call_next(req)
+_JSON_401 = (
+    b'{"jsonrpc":"2.0","id":null,'
+    b'"error":{"code":-32001,"message":"Unauthorized: invalid_token"}}'
+)
+_JSON_DISCOVERY = (
+    b'{"jsonrpc":"2.0","result":{"name":"odoo-mcp-v2","version":"0.1.0"}}'
+)
 
-        # GET sin Accept: text/event-stream — ChatGPT preflight/discovery.
-        # FastMCP devolveria 406; interceptamos y retornamos 200 JSON basico.
-        if req.method == 'GET':
-            accept = req.headers.get('accept', '')
+
+class BearerMiddleware:
+    """Middleware ASGI que:
+    1. Extrae token de Bearer header, X-Api-Key o path opaco /mcp/<token>.
+    2. Reescribe /mcp/<token> → /mcp para que FastMCP lo procese correctamente.
+    3. Devuelve 401 si el token no es válido en requests POST.
+    4. Devuelve 200 JSON discovery para GET sin Accept: text/event-stream.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+
+        path   = scope.get('path', '')
+        method = scope.get('method', '')
+
+        if not path.startswith('/mcp'):
+            await self.app(scope, receive, send)
+            return
+
+        headers_raw = dict(scope.get('headers', []))
+        auth      = headers_raw.get(b'authorization', b'').decode()
+        x_api_key = headers_raw.get(b'x-api-key', b'').decode()
+        ua        = headers_raw.get(b'user-agent', b'').decode()
+        accept    = headers_raw.get(b'accept', b'').decode()
+
+        # --- GET: discovery / SSE ---
+        if method == 'GET':
             if 'text/event-stream' not in accept:
-                return JSONResponse(
-                    {'jsonrpc': '2.0', 'result': {'name': 'odoo-mcp-v2', 'version': '0.1.0'}},
-                    status_code=200,
-                )
-            # SSE legitimo — pasa sin auth (Claude.ai abre el stream antes del tool call)
-            return await call_next(req)
+                # ChatGPT preflight — devolver 200 JSON sin llegar a FastMCP
+                await self._send_json(send, 200, _JSON_DISCOVERY)
+                return
+            # SSE legítimo (Claude.ai) — pasar sin auth
+            await self.app(scope, receive, send)
+            return
 
-        # POST — requiere autenticacion.
-        # Acepta Authorization: Bearer (Claude.ai) o X-Api-Key (ChatGPT API key mode).
-        auth      = req.headers.get('authorization', '')
-        x_api_key = req.headers.get('x-api-key', '') or req.headers.get('X-Api-Key', '')
-        ua        = req.headers.get('user-agent', '')
-        token, src = AuthMiddleware.extract_token(auth, str(req.url.path), x_api_key)
+        # --- POST: requiere autenticacion ---
+        token, src = AuthMiddleware.extract_token(auth, path, x_api_key)
         actor = _registry.verify(token) if _registry else None
 
         if not actor:
@@ -83,17 +110,26 @@ class BearerMiddleware(BaseHTTPMiddleware):
                     denied_reason='invalid_token',
                     client_type=AuthMiddleware.detect_client_type(ua, src),
                 )
-            return JSONResponse(
-                {'jsonrpc': '2.0', 'id': None,
-                 'error': {'code': -32001, 'message': 'Unauthorized: invalid_token'}},
-                status_code=401,
-            )
+            await self._send_json(send, 401, _JSON_401)
+            return
+
+        # Si el token vino en el path (/mcp/<token>), reescribir → /mcp
+        # para que FastMCP lo procese en su endpoint registrado.
+        if src == 'path' and path != '/mcp':
+            scope = {**scope, 'path': '/mcp', 'raw_path': b'/mcp'}
 
         tok = _actor.set(actor)
         try:
-            return await call_next(req)
+            await self.app(scope, receive, send)
         finally:
             _actor.reset(tok)
+
+    @staticmethod
+    async def _send_json(send: Send, status: int, body: bytes) -> None:
+        await send({'type': 'http.response.start', 'status': status,
+                    'headers': [(b'content-type', b'application/json'),
+                                (b'content-length', str(len(body)).encode())]})
+        await send({'type': 'http.response.body', 'body': body, 'more_body': False})
 
 
 from app.auth_middleware import now_ms
@@ -286,6 +322,8 @@ odoo_test_connection = odoo_who_am_i
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
     load()
-    app = mcp.streamable_http_app()
-    app.add_middleware(BearerMiddleware)
+    # BearerMiddleware es ASGI puro: wrapping directo, no add_middleware()
+    # Esto permite reescribir scope['path'] antes de que FastMCP lo procese.
+    inner = mcp.streamable_http_app()
+    app   = BearerMiddleware(inner)
     uvicorn.run(app, host='0.0.0.0', port=8000)
