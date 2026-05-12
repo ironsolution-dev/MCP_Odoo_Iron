@@ -11,7 +11,8 @@ from app.token_registry import ActorEntry
 
 PROJECT_SAFE_FIELDS: list[str] = [
     "id", "name", "description", "user_id", "partner_id",
-    "date_start", "date", "stage_id", "active",
+    "date_start", "date", "active",
+    # stage_id excluido: feature "Etapas de proyecto" no habilitada en esta instancia
 ]
 
 PROJECT_WRITABLE_FIELDS: set[str] = {"name", "description", "user_id"}
