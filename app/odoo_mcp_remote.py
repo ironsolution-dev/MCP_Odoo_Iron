@@ -96,11 +96,45 @@ class BearerMiddleware(BaseHTTPMiddleware):
             _actor.reset(tok)
 
 
+from app.auth_middleware import now_ms
+
+
 def _a() -> ActorEntry:
     a = _actor.get()
     if not a:
         raise PermissionError('no_authenticated_actor')
     return a
+
+
+async def _audited(coro, tool_name: str):
+    """Ejecuta coro y emite audit entry de success o error con latencia."""
+    actor = _actor.get()
+    start = now_ms()
+    try:
+        result = await coro
+        if _mw and actor:
+            _mw.audit.emit(
+                actor=actor.actor,
+                role=actor.role,
+                tool=tool_name,
+                allowed=True,
+                latency_ms=now_ms() - start,
+                result_count=len(result) if isinstance(result, list) else 1,
+            )
+        return result
+    except Exception as exc:
+        is_denied = isinstance(exc, PermissionError)
+        if _mw and actor:
+            _mw.audit.emit(
+                actor=actor.actor,
+                role=actor.role,
+                tool=tool_name,
+                allowed=not is_denied,
+                denied_reason=str(exc)[:120] if is_denied else None,
+                error_class=None if is_denied else exc.__class__.__name__,
+                latency_ms=now_ms() - start,
+            )
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -112,134 +146,131 @@ mcp = FastMCP('odoo-mcp-v2', stateless_http=True, json_response=True,
 
 @mcp.tool()
 async def odoo_who_am_i(ctx: Context) -> dict:
-    return await S.odoo_who_am_i(_a(), _odoo)
+    return await _audited(S.odoo_who_am_i(_a(), _odoo), 'odoo_who_am_i')
 
 @mcp.tool()
 async def odoo_health(ctx: Context) -> dict:
-    return await S.odoo_health(_a(), _odoo)
+    return await _audited(S.odoo_health(_a(), _odoo), 'odoo_health')
 
 @mcp.tool()
 async def odoo_validate_apl_stages(ctx: Context) -> dict:
-    return await S.odoo_validate_apl_stages(_a(), _odoo)
+    return await _audited(S.odoo_validate_apl_stages(_a(), _odoo), 'odoo_validate_apl_stages')
 
 @mcp.tool()
 async def odoo_my_tasks(ctx: Context, limit: int = 50) -> list:
-    return await T.odoo_my_tasks(_a(), _odoo, _policy, limit=limit)
+    return await _audited(T.odoo_my_tasks(_a(), _odoo, _policy, limit=limit), 'odoo_my_tasks')
 
 @mcp.tool()
 async def odoo_my_tasks_today(ctx: Context, stage_today_id: int, limit: int = 50) -> list:
-    return await T.odoo_my_tasks_today(_a(), _odoo, _policy, stage_today_id, limit=limit)
+    return await _audited(T.odoo_my_tasks_today(_a(), _odoo, _policy, stage_today_id, limit=limit), 'odoo_my_tasks_today')
 
 @mcp.tool()
 async def odoo_my_tasks_overdue(ctx: Context, today_iso: str, limit: int = 50) -> list:
-    return await T.odoo_my_tasks_overdue(_a(), _odoo, _policy, today_iso, limit=limit)
+    return await _audited(T.odoo_my_tasks_overdue(_a(), _odoo, _policy, today_iso, limit=limit), 'odoo_my_tasks_overdue')
 
 @mcp.tool()
 async def odoo_create_my_todo_apl(ctx: Context, payload: dict) -> dict:
-    return await T.odoo_create_my_todo_apl(_a(), _odoo, _policy, payload)
+    return await _audited(T.odoo_create_my_todo_apl(_a(), _odoo, _policy, payload), 'odoo_create_my_todo_apl')
 
 @mcp.tool()
 async def odoo_create_project_task_apl(ctx: Context, project_id: int, payload: dict) -> dict:
-    return await T.odoo_create_project_task_apl(_a(), _odoo, _policy, project_id, payload)
+    return await _audited(T.odoo_create_project_task_apl(_a(), _odoo, _policy, project_id, payload), 'odoo_create_project_task_apl')
 
 @mcp.tool()
 async def odoo_update_task_apl(ctx: Context, task_id: int, changes: dict) -> dict:
-    return await T.odoo_update_task_apl(_a(), _odoo, _policy, task_id, changes)
+    return await _audited(T.odoo_update_task_apl(_a(), _odoo, _policy, task_id, changes), 'odoo_update_task_apl')
 
 @mcp.tool()
 async def odoo_move_task(ctx: Context, task_id: int, stage_id: int) -> dict:
-    return await T.odoo_move_task(_a(), _odoo, _policy, task_id, stage_id)
+    return await _audited(T.odoo_move_task(_a(), _odoo, _policy, task_id, stage_id), 'odoo_move_task')
 
 @mcp.tool()
 async def odoo_mark_task_done(ctx: Context, task_id: int, evidence: str, done_stage_id: int) -> dict:
-    return await T.odoo_mark_task_done(_a(), _odoo, _policy, task_id, evidence, done_stage_id)
+    return await _audited(T.odoo_mark_task_done(_a(), _odoo, _policy, task_id, evidence, done_stage_id), 'odoo_mark_task_done')
 
 @mcp.tool()
 async def odoo_cancel_task(ctx: Context, task_id: int, reason: str, cancelled_stage_id: int) -> dict:
-    return await T.odoo_cancel_task(_a(), _odoo, _policy, task_id, reason, cancelled_stage_id)
+    return await _audited(T.odoo_cancel_task(_a(), _odoo, _policy, task_id, reason, cancelled_stage_id), 'odoo_cancel_task')
 
 @mcp.tool()
 async def odoo_list_projects(ctx: Context, limit: int = 50) -> list:
-    return await P.odoo_list_projects(_a(), _odoo, _policy, limit=limit)
+    return await _audited(P.odoo_list_projects(_a(), _odoo, _policy, limit=limit), 'odoo_list_projects')
 
 @mcp.tool()
 async def odoo_get_project(ctx: Context, project_id: int) -> dict:
-    return await P.odoo_get_project(_a(), _odoo, _policy, project_id)
+    return await _audited(P.odoo_get_project(_a(), _odoo, _policy, project_id), 'odoo_get_project')
 
 @mcp.tool()
 async def odoo_create_project(ctx: Context, name: str, description: str = None,
                                user_id: int = None) -> dict:
-    return await P.odoo_create_project(_a(), _odoo, _policy, name, description, user_id)
+    return await _audited(P.odoo_create_project(_a(), _odoo, _policy, name, description, user_id), 'odoo_create_project')
 
 @mcp.tool()
 async def odoo_update_project_basic(ctx: Context, project_id: int, changes: dict) -> dict:
-    return await P.odoo_update_project_basic(_a(), _odoo, _policy, project_id, changes)
+    return await _audited(P.odoo_update_project_basic(_a(), _odoo, _policy, project_id, changes), 'odoo_update_project_basic')
 
 @mcp.tool()
 async def odoo_project_tasks(ctx: Context, project_id: int, limit: int = 100) -> list:
-    return await P.odoo_project_tasks(_a(), _odoo, _policy, project_id, limit=limit)
+    return await _audited(P.odoo_project_tasks(_a(), _odoo, _policy, project_id, limit=limit), 'odoo_project_tasks')
 
 @mcp.tool()
 async def odoo_list_calendar_events(ctx: Context, start_after: str, end_before: str,
                                     limit: int = 100) -> list:
-    return await C.odoo_list_calendar_events(_a(), _odoo, _policy, start_after, end_before,
-                                              limit=limit)
+    return await _audited(C.odoo_list_calendar_events(_a(), _odoo, _policy, start_after, end_before, limit=limit), 'odoo_list_calendar_events')
 
 @mcp.tool()
 async def odoo_create_calendar_event(ctx: Context, name: str, start: str, stop: str,
                                      description: str = None, location: str = None,
                                      partner_ids: list = None, allday: bool = False) -> dict:
-    return await C.odoo_create_calendar_event(_a(), _odoo, _policy, name, start, stop,
-                                               description, location, partner_ids, allday)
+    return await _audited(C.odoo_create_calendar_event(_a(), _odoo, _policy, name, start, stop,
+                                               description, location, partner_ids, allday), 'odoo_create_calendar_event')
 
 @mcp.tool()
 async def odoo_update_calendar_event(ctx: Context, event_id: int, changes: dict) -> dict:
-    return await C.odoo_update_calendar_event(_a(), _odoo, _policy, event_id, changes)
+    return await _audited(C.odoo_update_calendar_event(_a(), _odoo, _policy, event_id, changes), 'odoo_update_calendar_event')
 
 @mcp.tool()
 async def odoo_list_employees(ctx: Context, department_id: int = None, limit: int = 50) -> list:
-    return await E.odoo_list_employees(_a(), _odoo, _policy, department_id=department_id,
-                                        limit=limit)
+    return await _audited(E.odoo_list_employees(_a(), _odoo, _policy, department_id=department_id, limit=limit), 'odoo_list_employees')
 
 @mcp.tool()
 async def odoo_get_employee(ctx: Context, employee_id: int) -> dict:
-    return await E.odoo_get_employee(_a(), _odoo, _policy, employee_id)
+    return await _audited(E.odoo_get_employee(_a(), _odoo, _policy, employee_id), 'odoo_get_employee')
 
 @mcp.tool()
 async def odoo_search_employee(ctx: Context, query: str, limit: int = 20) -> list:
-    return await E.odoo_search_employee(_a(), _odoo, _policy, query, limit=limit)
+    return await _audited(E.odoo_search_employee(_a(), _odoo, _policy, query, limit=limit), 'odoo_search_employee')
 
 @mcp.tool()
 async def odoo_list_crm_leads(ctx: Context, stage_id: int = None, limit: int = 50) -> list:
-    return await CR.odoo_list_crm_leads(_a(), _odoo, _policy, stage_id=stage_id, limit=limit)
+    return await _audited(CR.odoo_list_crm_leads(_a(), _odoo, _policy, stage_id=stage_id, limit=limit), 'odoo_list_crm_leads')
 
 @mcp.tool()
 async def odoo_get_crm_lead(ctx: Context, lead_id: int) -> dict:
-    return await CR.odoo_get_crm_lead(_a(), _odoo, _policy, lead_id)
+    return await _audited(CR.odoo_get_crm_lead(_a(), _odoo, _policy, lead_id), 'odoo_get_crm_lead')
 
 @mcp.tool()
 async def odoo_add_crm_note(ctx: Context, lead_id: int, body: str) -> dict:
-    return await CR.odoo_add_crm_note(_a(), _odoo, _policy, lead_id, body)
+    return await _audited(CR.odoo_add_crm_note(_a(), _odoo, _policy, lead_id, body), 'odoo_add_crm_note')
 
 @mcp.tool()
 async def odoo_create_crm_activity(ctx: Context, lead_id: int, summary: str, deadline: str,
                                     activity_type_id: int, user_id: int = None,
                                     note: str = None) -> dict:
-    return await CR.odoo_create_crm_activity(_a(), _odoo, _policy, lead_id, summary, deadline,
-                                              activity_type_id, user_id, note)
+    return await _audited(CR.odoo_create_crm_activity(_a(), _odoo, _policy, lead_id, summary,
+                                              deadline, activity_type_id, user_id, note), 'odoo_create_crm_activity')
 
 @mcp.tool()
 async def odoo_list_partners(ctx: Context, only_companies: bool = False, limit: int = 50) -> list:
-    return await PA.odoo_list_partners(_a(), _odoo, _policy, only_companies=only_companies,
-                                        limit=limit)
+    return await _audited(PA.odoo_list_partners(_a(), _odoo, _policy, only_companies=only_companies, limit=limit), 'odoo_list_partners')
 
 @mcp.tool()
 async def odoo_get_partner(ctx: Context, partner_id: int) -> dict:
-    return await PA.odoo_get_partner(_a(), _odoo, _policy, partner_id)
+    return await _audited(PA.odoo_get_partner(_a(), _odoo, _policy, partner_id), 'odoo_get_partner')
 
 @mcp.tool()
 async def odoo_search_partner(ctx: Context, query: str, limit: int = 20) -> list:
-    return await PA.odoo_search_partner(_a(), _odoo, _policy, query, limit=limit)
+    return await _audited(PA.odoo_search_partner(_a(), _odoo, _policy, query, limit=limit), 'odoo_search_partner')
 
 # Aliases BLUE — compatibilidad con conectores que usan nombres originales
 odoo_personal_tasks  = odoo_my_tasks
