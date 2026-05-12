@@ -20,7 +20,8 @@ from app.token_registry import ActorEntry
 TASK_SAFE_FIELDS: list[str] = [
     "id", "name", "description", "priority", "stage_id", "state",
     "project_id", "user_ids", "create_date", "write_date", "date_deadline",
-    "date_assign", "tag_ids", "kanban_state",
+    "date_assign", "tag_ids",
+    # kanban_state excluido: no disponible en Odoo 19 Community sin modulo kanban
 ]
 
 TASK_WRITABLE_FIELDS_BASIC: set[str] = {
