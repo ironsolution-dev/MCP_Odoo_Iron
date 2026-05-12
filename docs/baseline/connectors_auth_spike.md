@@ -37,35 +37,33 @@ HTTPServer(("0.0.0.0", 8001), Handler).serve_forever()
 
 ## Resultados
 
-### Claude.ai custom connector
+### Claude.ai custom connector — VALIDADO 12 may 2026
 
-- ¿Envía header `Authorization: Bearer <token>`?
-  TODO_WILLY: sí / no
-- ¿Permite configurar el valor del token en la UI del conector?
-  TODO_WILLY: sí / no — describir dónde
-- ¿Lo modifica antes de enviarlo (prefijos, mayúsculas)?
-  TODO_WILLY: pegar header recibido (redactado)
-- ¿Funciona con ruta `/mcp` directa?
-  TODO_WILLY: sí / no
+- **Envía `Authorization: Bearer`?** NO. La UI del conector personalizado (BETA) solo tiene campo URL + OAuth. No hay campo para Bearer token.
+- **Mecanismo de auth utilizado:** Token en path opaco — `https://mcp-v2.ovnisystem.com/mcp/<token>`
+- **UI:** Settings → Integrations → Add custom integration → campo "URL del servidor MCP remoto"
+- **Token en path:** El servidor reescribe `/mcp/<token>` → `/mcp` en el scope ASGI antes de FastMCP (BearerMiddleware ASGI puro).
+- **Tools descubiertas:** 30 ✅
+- **QA `odoo_who_am_i`:** actor=willy, uid=9, role=owner, policy=owner_policy ✅
+- **Fecha validación:** 12 mayo 2026
 
-### ChatGPT custom connector ("Odoo APL 2.0")
+### ChatGPT custom connector — VALIDADO 12 may 2026
 
-- ¿Envía header `Authorization: Bearer <token>`?
-  TODO_WILLY: sí / no
-- ¿Permite configurar el valor del token?
-  TODO_WILLY: sí / no
-- ¿Lo modifica?
-  TODO_WILLY: pegar header recibido (redactado)
-- ¿Funciona con ruta `/mcp`?
-  TODO_WILLY: sí / no
+- **Envía `Authorization: Bearer`?** NO en modo API Key. Envía `X-Api-Key: <token>`.
+- **Modo de auth configurado:** API Key (en la UI de configuración del GPT → Actions → Authentication → API Key)
+- **Header enviado:** `X-Api-Key: <mcp_token>`
+- **GET /mcp sin Accept: text/event-stream:** retornaba 406 de FastMCP → corregido con intercepción en middleware que retorna 200 JSON discovery.
+- **Status:** Fix implementado en commit `d0a2bfb`. Pendiente validación QA manual completa con token de Yuniesky/Anet.
 
 ## Decisión
 
-Según resultados, marcar UNA opción:
+✅ **Fallback ruta opaca para Claude.ai + X-Api-Key para ChatGPT** — un solo contenedor sirve ambos modos:
 
-- [ ] **Bearer puro en ambos** → producción usa solo `Authorization: Bearer`.
-- [ ] **Bearer en uno + fallback ruta opaca en otro** → mismo contenedor sirve ambos modos; indicar cuál usa fallback.
-- [ ] **Fallback ruta opaca en ambos** → URL `https://mcp-v2.ovnisystem.com/mcp/<opaque_token>`. El segmento es opaco (NO el actor name); el servidor lo redacta de logs.
+- Claude.ai → URL con token en path → middleware extrae token, reescribe path a `/mcp`
+- ChatGPT → `X-Api-Key: <token>` header → middleware extrae de header, path permanece `/mcp`
+- Bearer header también soportado (modo preferido si algún cliente lo habilita en el futuro)
+
+Un solo contenedor `odoo-mcp-v2`, sin clones por conector. ADR-002 y ADR-007 vigentes.
 
 ## Notas operativas
 
