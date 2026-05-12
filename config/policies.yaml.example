@@ -1,0 +1,181 @@
+version: 1
+
+# Denylist GLOBAL — aplica a TODOS los actores sin importar policy.
+# Sec 8.6 Task Packet. Estos modelos/acciones son intocables desde MCP en fase 1.
+denylist_global:
+  - {model: res.users, actions: [write, create, unlink]}
+  - {model: res.company, actions: [write, create, unlink]}
+  - {model: ir.config_parameter, actions: [write, create, unlink]}
+  - {model: ir.module.module, actions: [write, create, unlink]}
+  - {model: account.move, actions: [write, create, unlink]}
+  - {model: account.payment, actions: [write, create, unlink]}
+  - {model: stock.quant, actions: [write, create, unlink]}
+  - {model: stock.picking, actions: [write, create, unlink]}
+  - {model: purchase.order, actions: [write, create, unlink]}
+  - {model: sale.order, actions: [write, create, unlink]}
+  - {model: hr.contract, actions: [read, write, create, unlink]}
+
+# Field allowlists — solo estos campos pueden viajar al LLM.
+# Sec 8.3 (hr.employee), 8.4 (res.partner) Task Packet.
+field_allowlists:
+  hr.employee:
+    - id
+    - name
+    - work_email
+    - work_phone
+    - mobile_phone
+    - department_id
+    - job_id
+    - parent_id
+    - user_id
+    - active
+  res.partner:
+    - id
+    - name
+    - display_name
+    - email
+    - phone
+    - mobile
+    - is_company
+    - parent_id
+    - function
+    - city
+    - country_id
+    - category_id
+    - user_id
+    - active
+    - customer_rank
+    - supplier_rank
+
+policies:
+  # ----------------------------------------------------------------------
+  # owner_policy — Willy
+  # ----------------------------------------------------------------------
+  owner_policy:
+    allowed_tools:
+      - odoo_who_am_i
+      - odoo_health
+      - odoo_validate_apl_stages
+      - odoo_my_tasks
+      - odoo_my_tasks_today
+      - odoo_my_tasks_overdue
+      - odoo_create_my_todo_apl
+      - odoo_create_project_task_apl
+      - odoo_update_task_apl
+      - odoo_move_task
+      - odoo_mark_task_done
+      - odoo_cancel_task
+      - odoo_list_projects
+      - odoo_get_project
+      - odoo_create_project
+      - odoo_update_project_basic
+      - odoo_project_tasks
+      - odoo_list_calendar_events
+      - odoo_create_calendar_event
+      - odoo_update_calendar_event
+      - odoo_list_employees
+      - odoo_get_employee
+      - odoo_search_employee
+      - odoo_list_crm_leads
+      - odoo_get_crm_lead
+      - odoo_add_crm_note
+      - odoo_create_crm_activity
+      - odoo_list_partners
+      - odoo_get_partner
+      - odoo_search_partner
+    model_rules:
+      project.task:    {read: true,  create: true,  write: true,  unlink: false}
+      calendar.event:  {read: true,  create: true,  write: true,  unlink: false}
+      project.project: {read: true,  create: true,  write: true,  unlink: false}
+      hr.employee:     {read: true,  create: false, write: false, unlink: false}
+      crm.lead:        {read: true,  create: false, write: false, unlink: false}
+      res.partner:     {read: true,  create: false, write: false, unlink: false}
+      mail.message:    {read: true,  create: true,  write: false, unlink: false}
+      mail.activity:   {read: true,  create: true,  write: true,  unlink: false}
+      project.task.type: {read: true, create: false, write: false, unlink: false}
+      res.users:       {read: true,  create: false, write: false, unlink: false}
+    rate_limit:
+      requests_per_minute: 60
+      writes_per_minute: 20
+
+  # ----------------------------------------------------------------------
+  # operations_policy — Yuniesky
+  # ----------------------------------------------------------------------
+  operations_policy:
+    allowed_tools:
+      - odoo_who_am_i
+      - odoo_health
+      - odoo_my_tasks
+      - odoo_my_tasks_today
+      - odoo_my_tasks_overdue
+      - odoo_create_my_todo_apl
+      - odoo_create_project_task_apl
+      - odoo_update_task_apl
+      - odoo_move_task
+      - odoo_mark_task_done
+      - odoo_cancel_task
+      - odoo_list_projects
+      - odoo_get_project
+      - odoo_project_tasks
+      - odoo_list_calendar_events
+      - odoo_create_calendar_event
+      - odoo_update_calendar_event
+      - odoo_list_employees
+      - odoo_list_partners
+    model_rules:
+      project.task:    {read: true,  create: true,  write: true,  unlink: false}
+      calendar.event:  {read: true,  create: true,  write: true,  unlink: false}
+      project.project: {read: true,  create: false, write: false, unlink: false}
+      hr.employee:     {read: true,  create: false, write: false, unlink: false}
+      crm.lead:        {read: false, create: false, write: false, unlink: false}
+      res.partner:     {read: true,  create: false, write: false, unlink: false}
+      mail.message:    {read: true,  create: true,  write: false, unlink: false}
+      mail.activity:   {read: true,  create: true,  write: false, unlink: false}
+      project.task.type: {read: true, create: false, write: false, unlink: false}
+      res.users:       {read: true,  create: false, write: false, unlink: false}
+    rate_limit:
+      requests_per_minute: 40
+      writes_per_minute: 15
+
+  # ----------------------------------------------------------------------
+  # medical_direction_policy — Anet
+  # ----------------------------------------------------------------------
+  medical_direction_policy:
+    allowed_tools:
+      - odoo_who_am_i
+      - odoo_health
+      - odoo_my_tasks
+      - odoo_my_tasks_today
+      - odoo_my_tasks_overdue
+      - odoo_create_my_todo_apl
+      - odoo_create_project_task_apl
+      - odoo_update_task_apl
+      - odoo_move_task
+      - odoo_mark_task_done
+      - odoo_cancel_task
+      - odoo_list_projects
+      - odoo_get_project
+      - odoo_project_tasks
+      - odoo_list_calendar_events
+      - odoo_create_calendar_event
+      - odoo_update_calendar_event
+      - odoo_list_employees
+      - odoo_list_crm_leads
+      - odoo_get_crm_lead
+      - odoo_add_crm_note
+      - odoo_list_partners
+      - odoo_get_partner
+    model_rules:
+      project.task:    {read: true,  create: true,  write: true,  unlink: false}
+      calendar.event:  {read: true,  create: true,  write: true,  unlink: false}
+      project.project: {read: true,  create: false, write: false, unlink: false}
+      hr.employee:     {read: true,  create: false, write: false, unlink: false}
+      crm.lead:        {read: true,  create: false, write: false, unlink: false}
+      res.partner:     {read: true,  create: false, write: false, unlink: false}
+      mail.message:    {read: true,  create: true,  write: false, unlink: false}
+      mail.activity:   {read: true,  create: true,  write: false, unlink: false}
+      project.task.type: {read: true, create: false, write: false, unlink: false}
+      res.users:       {read: true,  create: false, write: false, unlink: false}
+    rate_limit:
+      requests_per_minute: 40
+      writes_per_minute: 15
