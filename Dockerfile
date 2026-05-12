@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Instalar dependencias Python primero (cache layer)
 COPY pyproject.toml ./
 RUN pip install --upgrade pip && pip install \
-    "fastmcp>=0.2.0" \
-    "httpx>=0.27" \
+    "mcp[cli]>=1.27.0" \
+    "uvicorn>=0.29" \
     "pyyaml>=6.0"
 
 # Copiar codigo
@@ -29,8 +29,8 @@ USER mcpuser
 
 EXPOSE 8000
 
-# Healthcheck simple (verifica que el puerto responde)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -fsS http://localhost:8000/health || exit 1
+# Healthcheck via TCP — el endpoint /mcp requiere headers MCP especificos
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD python3 -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1',8000)); s.close()"
 
 CMD ["python", "-m", "app.odoo_mcp_remote"]
