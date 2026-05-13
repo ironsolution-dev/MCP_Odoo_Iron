@@ -34,6 +34,7 @@ from app.tools import (
     employees as emp,
     partners as par,
     projects as prj,
+    system as sys_tools,
     tasks as tsk,
 )
 
@@ -41,11 +42,13 @@ from app.tools import (
 # Patrones de intent en orden de precedencia. El primero que matchea decide.
 # "tasks_overdue" antes que "tasks_my" porque "tareas vencidas" matchea ambos.
 _INTENTS: list[tuple[str, re.Pattern[str]]] = [
+    # Identity primero — frases cortas que matchean otros intents (ej. "soy")
+    ("identity",        re.compile(r"\b(quien soy|who am i|mi identidad|mis datos|mi rol|mi policy|identidad odoo)\b", re.I)),
     ("tasks_overdue",   re.compile(r"\b(vencid|overdue|atrasad|retras)", re.I)),
     ("tasks_my",        re.compile(r"\b(mis tareas|tarea|todo|to.?do|pendient|asignad)", re.I)),
     ("projects",        re.compile(r"\b(proyecto|project)", re.I)),
     ("employees",       re.compile(r"\b(empleado|equipo|colega|colabora|staff|personal|team)", re.I)),
-    ("partners",        re.compile(r"\b(contacto|cliente|partner|proveedor)", re.I)),
+    ("partners",        re.compile(r"\b(contacto|cliente|partner|proveedor|empresa)", re.I)),
     ("crm_leads",       re.compile(r"\b(lead|oportunidad|crm|prospect)", re.I)),
     ("calendar_events", re.compile(r"\b(evento|calendar|reuni|cita|agenda|meeting)", re.I)),
 ]
@@ -133,12 +136,32 @@ def _fmt_event(r: dict) -> dict:
     }
 
 
+def _fmt_identity(info: dict) -> dict:
+    """Identidad del actor formato OpenAI search."""
+    return {
+        "id": f"identity:{info.get('actor', 'unknown')}",
+        "title": f"Identidad: {info.get('display_name') or info.get('actor')}",
+        "text": (
+            f"Actor MCP: {info.get('actor')} | "
+            f"Rol: {info.get('role')} | "
+            f"Policy efectiva: {info.get('policy')} | "
+            f"UID Odoo: {info.get('odoo_uid')} | "
+            f"Username Odoo: {info.get('odoo_username')} | "
+            f"Odoo: {info.get('odoo_db')} @ {info.get('odoo_url')}"
+        ),
+        "url": "",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Routing: intent -> coroutine que devuelve list[dict] formateados
 # ---------------------------------------------------------------------------
 
 async def _route(intent: str, actor: ActorEntry, odoo: OdooClient,
                  policy: PolicyEngine) -> list[dict]:
+    if intent == "identity":
+        info = await sys_tools.odoo_who_am_i(actor, odoo)
+        return [_fmt_identity(info)]
     if intent == "tasks_overdue":
         rows = await tsk.odoo_my_tasks_overdue(
             actor, odoo, policy, today_iso=date.today().isoformat(), limit=20,
@@ -160,10 +183,13 @@ async def _route(intent: str, actor: ActorEntry, odoo: OdooClient,
         rows = await crm.odoo_list_crm_leads(actor, odoo, policy, limit=20)
         return [_fmt_lead(r) for r in rows]
     if intent == "calendar_events":
-        today = date.today().isoformat()
-        in_two_weeks = (date.today() + timedelta(days=14)).isoformat()
+        # Ventana amplia: 7 dias atras a 30 adelante (cubre eventos en curso).
+        # El filtro user_id/partner_ids dentro de odoo_list_calendar_events
+        # ya restringe a eventos del actor; ampliamos el rango temporal.
+        start = (date.today() - timedelta(days=7)).isoformat()
+        end = (date.today() + timedelta(days=30)).isoformat()
         rows = await cal.odoo_list_calendar_events(
-            actor, odoo, policy, today, in_two_weeks, limit=20,
+            actor, odoo, policy, start, end, limit=20,
         )
         return [_fmt_event(r) for r in rows]
     # default: overview con tareas + proyectos. Cada bloque tolera Permission.
@@ -204,6 +230,7 @@ _WRITE_VERB_RE = re.compile(
 
 # Acciones soportadas por _execute_action.
 _VALID_ACTIONS = {
+    "whoami",
     "create_task", "create_todo", "update_task",
     "move_task", "close_task", "cancel_task",
     "create_project", "create_event",
@@ -272,6 +299,9 @@ async def _execute_action(payload: dict, actor: ActorEntry, odoo: OdooClient,
             kind="error:unknown_action",
         )
     try:
+        if action == "whoami":
+            info = await sys_tools.odoo_who_am_i(actor, odoo)
+            return {"results": [_fmt_identity(info)]}
         if action == "create_task":
             result = await create_task(
                 actor, odoo, policy,

@@ -174,16 +174,25 @@ async def odoo_move_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngi
 async def odoo_mark_task_done(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                               task_id: int, evidence: str, done_stage_id: int) -> dict:
     """Cierra una tarea exigiendo evidencia (APL 2.0: no cerrar sin evidencia).
-    Read-after-write y verificacion de estado final."""
+    Read-after-write y verificacion de estado final.
+
+    Detecta automaticamente si la tarea es personal (sin project_id): Odoo
+    rechaza `stage_id` en tareas privadas, exige `personal_stage_type_id`.
+    """
     cleaned_evidence = validate_evidence(evidence)
     _ensure_policy(policy, actor, "odoo_mark_task_done", "project.task", "write")
+
+    # Detectar si es tarea personal (sin proyecto) para escoger el campo correcto.
+    pre = await odoo.read(actor, "project.task", [task_id], ["id", "project_id"])
+    is_personal = not pre or not pre[0].get("project_id")
+    stage_field = "personal_stage_type_id" if is_personal else "stage_id"
 
     # Post evidencia como mensaje primero (queda en el chatter)
     await odoo.call(actor, "project.task", "message_post", [[task_id]],
                     {"body": f"[Evidencia de cierre]\n{cleaned_evidence}"})
-    # Mover a Done stage + state
+    # Mover a Done stage + state. Campo segun tipo de tarea.
     await odoo.write(actor, "project.task", [task_id],
-                     {"stage_id": done_stage_id, "state": "1_done"})
+                     {stage_field: done_stage_id, "state": "1_done"})
 
     after = await odoo.read(actor, "project.task", [task_id],
                             TASK_SAFE_FIELDS + ["state"])
@@ -191,25 +200,34 @@ async def odoo_mark_task_done(actor: ActorEntry, odoo: OdooClient, policy: Polic
         "task": after[0] if after else {"id": task_id},
         "evidence_recorded": True,
         "evidence_length": len(cleaned_evidence),
+        "task_kind": "personal" if is_personal else "project",
     }
 
 
 async def odoo_cancel_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                            task_id: int, reason: str, cancelled_stage_id: int) -> dict:
-    """Cancela una tarea registrando el motivo en el chatter."""
+    """Cancela una tarea registrando el motivo en el chatter.
+
+    Detecta tarea personal vs project para usar el campo de stage correcto.
+    """
     cleaned_reason = validate_cancel_reason(reason)
     _ensure_policy(policy, actor, "odoo_cancel_task", "project.task", "write")
+
+    pre = await odoo.read(actor, "project.task", [task_id], ["id", "project_id"])
+    is_personal = not pre or not pre[0].get("project_id")
+    stage_field = "personal_stage_type_id" if is_personal else "stage_id"
 
     await odoo.call(actor, "project.task", "message_post", [[task_id]],
                     {"body": f"[Motivo de cancelacion]\n{cleaned_reason}"})
     await odoo.write(actor, "project.task", [task_id],
-                     {"stage_id": cancelled_stage_id, "state": "1_canceled"})
+                     {stage_field: cancelled_stage_id, "state": "1_canceled"})
 
     after = await odoo.read(actor, "project.task", [task_id],
                             TASK_SAFE_FIELDS + ["state"])
     return {
         "task": after[0] if after else {"id": task_id},
         "cancel_reason_recorded": True,
+        "task_kind": "personal" if is_personal else "project",
     }
 
 

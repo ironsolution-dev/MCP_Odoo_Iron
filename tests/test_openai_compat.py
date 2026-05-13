@@ -560,3 +560,111 @@ def test_try_parse_action_extracts_action_from_embedded_json():
     assert result is not None
     assert result["action"] == "create_task"
     assert result["project_id"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Fix A — whoami (intent + JSON action)
+# ---------------------------------------------------------------------------
+
+class FakeOdooWithCreds(FakeOdoo):
+    """FakeOdoo + soporte de get_credentials para test de identity."""
+    async def authenticate(self, actor):
+        return 11
+    async def get_credentials(self, actor):
+        class C:
+            url = "https://odoo.test/"
+            db = "odoo_test"
+            username = "yuniesky@test"
+        return C()
+
+
+@pytest.mark.asyncio
+async def test_search_whoami_via_intent(actors_yaml, policies_yaml, env_actors, token_yuniesky):
+    """search('quien soy') devuelve identidad del actor."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdooWithCreds()
+    actor = reg.verify(token_yuniesky)
+    out = await search(actor, odoo, pe, "quien soy en Odoo")
+    assert len(out["results"]) == 1
+    assert out["results"][0]["id"].startswith("identity:")
+    text = out["results"][0]["text"]
+    assert "yuniesky" in text.lower() or "11" in text
+
+
+@pytest.mark.asyncio
+async def test_search_whoami_via_json_action(actors_yaml, policies_yaml, env_actors, token_willy):
+    """search con JSON action whoami funciona."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdooWithCreds()
+    actor = reg.verify(token_willy)
+    out = await search(actor, odoo, pe, '{"action":"whoami"}')
+    assert out["results"][0]["id"].startswith("identity:")
+
+
+# ---------------------------------------------------------------------------
+# Fix B — close_task / cancel_task detectan tarea personal
+# ---------------------------------------------------------------------------
+
+class FakeOdooWithProject(FakeOdoo):
+    """FakeOdoo donde la tarea pre-leida tiene project_id."""
+    def __init__(self, task_has_project=True, **kwargs):
+        super().__init__(**kwargs)
+        self.task_has_project = task_has_project
+
+    async def read(self, actor, model, ids, fields):
+        self.calls.append(("read", model, ids))
+        if model == "project.task" and "project_id" in fields:
+            # pre-read del fix B
+            return [{"id": ids[0],
+                      "project_id": {"id": 3, "name": "Proj"} if self.task_has_project else False}]
+        return self.read_returns.get(model, [{"id": ids[0], "name": f"stub_{model}"}])
+
+
+@pytest.mark.asyncio
+async def test_close_task_on_personal_uses_personal_stage_type_id(actors_yaml, policies_yaml, env_actors, token_willy):
+    """Tarea sin project_id -> usa personal_stage_type_id en lugar de stage_id."""
+    from app.tools.tasks import odoo_mark_task_done
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdooWithProject(task_has_project=False)
+    actor = reg.verify(token_willy)
+    await odoo_mark_task_done(actor, odoo, pe, 129,
+                               "Evidencia suficiente del cierre", 7)
+    # Buscar la llamada write y verificar que uso personal_stage_type_id
+    write_calls = [c for c in odoo.calls if c[0] == "write"]
+    assert write_calls, "write no fue llamado"
+    values = write_calls[0][3]
+    assert "personal_stage_type_id" in values, f"esperado personal_stage_type_id, got {values}"
+    assert "stage_id" not in values, "no debe usar stage_id en tarea personal"
+
+
+@pytest.mark.asyncio
+async def test_close_task_on_project_task_uses_stage_id(actors_yaml, policies_yaml, env_actors, token_willy):
+    """Tarea con project_id -> usa stage_id normal."""
+    from app.tools.tasks import odoo_mark_task_done
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdooWithProject(task_has_project=True)
+    actor = reg.verify(token_willy)
+    await odoo_mark_task_done(actor, odoo, pe, 100,
+                               "Tarea de proyecto cerrada con evidencia", 7)
+    write_calls = [c for c in odoo.calls if c[0] == "write"]
+    values = write_calls[0][3]
+    assert "stage_id" in values
+    assert "personal_stage_type_id" not in values
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_on_personal_uses_personal_stage_type_id(actors_yaml, policies_yaml, env_actors, token_willy):
+    from app.tools.tasks import odoo_cancel_task
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdooWithProject(task_has_project=False)
+    actor = reg.verify(token_willy)
+    await odoo_cancel_task(actor, odoo, pe, 129,
+                            "Cliente cambio prioridad de la tarea personal", 8)
+    write_calls = [c for c in odoo.calls if c[0] == "write"]
+    values = write_calls[0][3]
+    assert "personal_stage_type_id" in values
