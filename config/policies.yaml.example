@@ -83,6 +83,10 @@ policies:
       - odoo_list_partners
       - odoo_get_partner
       - odoo_search_partner
+      - odoo_get_task
+      - odoo_task_subtasks
+      - odoo_list_attachments
+      - odoo_get_attachment
     model_rules:
       project.task:    {read: true,  create: true,  write: true,  unlink: false}
       calendar.event:  {read: true,  create: true,  write: true,  unlink: false}
@@ -92,6 +96,7 @@ policies:
       res.partner:     {read: true,  create: false, write: false, unlink: false}
       mail.message:    {read: true,  create: true,  write: false, unlink: false}
       mail.activity:   {read: true,  create: true,  write: true,  unlink: false}
+      ir.attachment:   {read: true,  create: false, write: false, unlink: false}
       project.task.type: {read: true, create: false, write: false, unlink: false}
       res.users:       {read: true,  create: false, write: false, unlink: false}
     rate_limit:
@@ -122,6 +127,10 @@ policies:
       - odoo_update_calendar_event
       - odoo_list_employees
       - odoo_list_partners
+      - odoo_get_task
+      - odoo_task_subtasks
+      - odoo_list_attachments
+      - odoo_get_attachment
     model_rules:
       project.task:    {read: true,  create: true,  write: true,  unlink: false}
       calendar.event:  {read: true,  create: true,  write: true,  unlink: false}
@@ -131,6 +140,7 @@ policies:
       res.partner:     {read: true,  create: false, write: false, unlink: false}
       mail.message:    {read: true,  create: true,  write: false, unlink: false}
       mail.activity:   {read: true,  create: true,  write: false, unlink: false}
+      ir.attachment:   {read: true,  create: false, write: false, unlink: false}
       project.task.type: {read: true, create: false, write: false, unlink: false}
       res.users:       {read: true,  create: false, write: false, unlink: false}
     rate_limit:
@@ -165,6 +175,10 @@ policies:
       - odoo_add_crm_note
       - odoo_list_partners
       - odoo_get_partner
+      - odoo_get_task
+      - odoo_task_subtasks
+      - odoo_list_attachments
+      - odoo_get_attachment
     model_rules:
       project.task:    {read: true,  create: true,  write: true,  unlink: false}
       calendar.event:  {read: true,  create: true,  write: true,  unlink: false}
@@ -174,6 +188,7 @@ policies:
       res.partner:     {read: true,  create: false, write: false, unlink: false}
       mail.message:    {read: true,  create: true,  write: false, unlink: false}
       mail.activity:   {read: true,  create: true,  write: false, unlink: false}
+      ir.attachment:   {read: true,  create: false, write: false, unlink: false}
       project.task.type: {read: true, create: false, write: false, unlink: false}
       res.users:       {read: true,  create: false, write: false, unlink: false}
     rate_limit:

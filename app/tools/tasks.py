@@ -21,6 +21,7 @@ TASK_SAFE_FIELDS: list[str] = [
     "id", "name", "description", "priority", "stage_id", "state",
     "project_id", "user_ids", "create_date", "write_date", "date_deadline",
     "date_assign", "tag_ids",
+    "parent_id", "child_ids",  # jerarquia de subtareas
     # kanban_state excluido: no disponible en Odoo 19 Community sin modulo kanban
 ]
 
@@ -49,6 +50,25 @@ async def odoo_my_tasks(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngin
     domain = [("project_id", "=", False), ("user_ids", "in", [uid])]
     return await odoo.search_read(actor, "project.task", domain, TASK_SAFE_FIELDS,
                                   limit=limit, order="date_deadline asc, priority desc")
+
+
+async def odoo_get_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
+                        task_id: int) -> dict:
+    """Devuelve detalle completo de una tarea (incluye parent_id y child_ids)."""
+    _ensure_policy(policy, actor, "odoo_get_task", "project.task", "read", fields=TASK_SAFE_FIELDS)
+    rows = await odoo.search_read(actor, "project.task", [("id", "=", task_id)],
+                                   TASK_SAFE_FIELDS, limit=1)
+    return rows[0] if rows else {"error": "task_not_found", "task_id": task_id}
+
+
+async def odoo_task_subtasks(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
+                              parent_task_id: int, limit: int = 100) -> list[dict]:
+    """Lista subtareas (project.task con parent_id == parent_task_id)."""
+    _ensure_policy(policy, actor, "odoo_task_subtasks", "project.task", "read", fields=TASK_SAFE_FIELDS)
+    return await odoo.search_read(actor, "project.task",
+                                   [("parent_id", "=", parent_task_id)],
+                                   TASK_SAFE_FIELDS, limit=limit,
+                                   order="priority desc, date_deadline asc")
 
 
 async def odoo_my_tasks_today(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,

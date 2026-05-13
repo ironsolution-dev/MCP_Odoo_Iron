@@ -26,6 +26,7 @@ from app.rate_limit import RateLimiter
 from app.token_registry import ActorEntry, TokenRegistry
 from app.tools import system as S, tasks as T, projects as P
 from app.tools import calendar as C, employees as E, crm as CR, partners as PA
+from app.tools import attachments as AT
 
 # ---------------------------------------------------------------------------
 # ContextVar: pasa el actor desde middleware a cada tool
@@ -371,6 +372,26 @@ async def odoo_get_partner(ctx: Context, partner_id: int) -> dict:
 async def odoo_search_partner(ctx: Context, query: str, limit: int = 20) -> list:
     """Busca contactos por nombre, email o teléfono en Odoo."""
     a = _a(); return await _audited(PA.odoo_search_partner(a, _odoo, _policy, query, limit=limit), 'odoo_search_partner', a)
+
+@mcp.tool()
+async def odoo_get_task(ctx: Context, task_id: int) -> dict:
+    """Obtiene el detalle completo de una tarea por ID, incluyendo padre y subtareas."""
+    a = _a(); return await _audited(T.odoo_get_task(a, _odoo, _policy, task_id), 'odoo_get_task', a)
+
+@mcp.tool()
+async def odoo_task_subtasks(ctx: Context, parent_task_id: int, limit: int = 100) -> list:
+    """Lista las subtareas (hijas) de una tarea padre en Odoo."""
+    a = _a(); return await _audited(T.odoo_task_subtasks(a, _odoo, _policy, parent_task_id, limit=limit), 'odoo_task_subtasks', a)
+
+@mcp.tool()
+async def odoo_list_attachments(ctx: Context, model: str, record_id: int, limit: int = 50) -> list:
+    """Lista adjuntos (archivos, imágenes, documentos) asociados a un registro de Odoo. Acepta model='project.task' o 'project.project'. Retorna metadatos + URL de descarga."""
+    a = _a(); return await _audited(AT.odoo_list_attachments(a, _odoo, _policy, model, record_id, limit=limit), 'odoo_list_attachments', a)
+
+@mcp.tool()
+async def odoo_get_attachment(ctx: Context, attachment_id: int) -> dict:
+    """Obtiene los metadatos y URL de descarga de un adjunto específico por ID."""
+    a = _a(); return await _audited(AT.odoo_get_attachment(a, _odoo, _policy, attachment_id), 'odoo_get_attachment', a)
 
 # Aliases BLUE — compatibilidad con conectores que usan nombres originales
 odoo_personal_tasks  = odoo_my_tasks
