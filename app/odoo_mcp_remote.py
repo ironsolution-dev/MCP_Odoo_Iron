@@ -56,25 +56,15 @@ _JSON_401 = (
     b'{"jsonrpc":"2.0","id":null,'
     b'"error":{"code":-32001,"message":"Unauthorized: invalid_token"}}'
 )
-_JSON_DISCOVERY = (
-    b'{"jsonrpc":"2.0","result":{'
-    b'"name":"odoo-mcp-v2",'
-    b'"version":"0.2.0",'
-    b'"description":"MCP Odoo APL 2.0 multiusuario. Permite a Willy, Yuniesky y Anet '
-    b'operar tareas, proyectos, calendario, CRM, empleados y contactos en Odoo desde '
-    b'Claude.ai o ChatGPT con identidad propia y policy engine deny-by-default.",'
-    b'"capabilities":{"tools":true,"resources":false,"prompts":false},'
-    b'"protocolVersion":"2024-11-05"'
-    b'}}'
-)
 
 
 class BearerMiddleware:
-    """Middleware ASGI que:
-    1. Extrae token de Bearer header, X-Api-Key o path opaco /mcp/<token>.
-    2. Reescribe /mcp/<token> → /mcp para que FastMCP lo procese correctamente.
-    3. Devuelve 401 si el token no es válido en requests POST.
-    4. Devuelve 200 JSON discovery para GET sin Accept: text/event-stream.
+    """Middleware ASGI mínimamente invasivo:
+    - GET /mcp: pasa directo a FastMCP (que maneja SSE o devuelve 406 si no es SSE,
+      tal como BLUE). NO intercepta para evitar romper el protocolo MCP estándar.
+    - POST /mcp: extrae token de Bearer, X-Api-Key o path opaco. Reescribe
+      /mcp/<token> → /mcp y autentica al actor. 401 si el token no es válido.
+    - Resto de paths: pasa directo.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -92,23 +82,17 @@ class BearerMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # GET: pasar directo a FastMCP. Si Accept incluye text/event-stream,
+        # FastMCP abre SSE; si no, devuelve 406 (comportamiento estándar MCP).
+        if method == 'GET':
+            await self.app(scope, receive, send)
+            return
+
+        # POST: requiere autenticacion.
         headers_raw = dict(scope.get('headers', []))
         auth      = headers_raw.get(b'authorization', b'').decode()
         x_api_key = headers_raw.get(b'x-api-key', b'').decode()
         ua        = headers_raw.get(b'user-agent', b'').decode()
-        accept    = headers_raw.get(b'accept', b'').decode()
-
-        # --- GET: discovery / SSE ---
-        if method == 'GET':
-            if 'text/event-stream' not in accept:
-                # ChatGPT preflight — devolver 200 JSON sin llegar a FastMCP
-                await self._send_json(send, 200, _JSON_DISCOVERY)
-                return
-            # SSE legítimo (Claude.ai) — pasar sin auth
-            await self.app(scope, receive, send)
-            return
-
-        # --- POST: requiere autenticacion ---
         token, src = AuthMiddleware.extract_token(auth, path, x_api_key)
         actor = _registry.verify(token) if _registry else None
 
