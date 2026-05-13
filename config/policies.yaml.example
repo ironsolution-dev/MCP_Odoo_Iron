@@ -53,6 +53,8 @@ policies:
   # ----------------------------------------------------------------------
   owner_policy:
     allowed_tools:
+      - search           # ChatGPT chat-mode adapter (enruta a my_tasks/list_*)
+      - fetch            # ChatGPT chat-mode adapter (enruta a get_*)
       - odoo_who_am_i
       - odoo_health
       - odoo_validate_apl_stages
@@ -108,6 +110,8 @@ policies:
   # ----------------------------------------------------------------------
   operations_policy:
     allowed_tools:
+      - search           # ChatGPT chat-mode adapter (enruta a my_tasks/list_*)
+      - fetch            # ChatGPT chat-mode adapter (enruta a get_*)
       - odoo_who_am_i
       - odoo_health
       - odoo_my_tasks
@@ -152,6 +156,8 @@ policies:
   # ----------------------------------------------------------------------
   medical_direction_policy:
     allowed_tools:
+      - search           # ChatGPT chat-mode adapter (enruta a my_tasks/list_*)
+      - fetch            # ChatGPT chat-mode adapter (enruta a get_*)
       - odoo_who_am_i
       - odoo_health
       - odoo_my_tasks

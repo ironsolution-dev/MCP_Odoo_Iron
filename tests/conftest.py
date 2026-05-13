@@ -116,6 +116,7 @@ def policies_yaml(tmp_path: Path) -> Path:
         "policies": {
             "owner_policy": {
                 "allowed_tools": [
+                    "search", "fetch",
                     "odoo_who_am_i", "odoo_health", "odoo_validate_apl_stages",
                     "odoo_my_tasks", "odoo_my_tasks_today", "odoo_my_tasks_overdue",
                     "odoo_create_my_todo_apl", "odoo_create_project_task_apl",
@@ -129,6 +130,8 @@ def policies_yaml(tmp_path: Path) -> Path:
                     "odoo_list_crm_leads", "odoo_get_crm_lead",
                     "odoo_add_crm_note", "odoo_create_crm_activity",
                     "odoo_list_partners", "odoo_get_partner", "odoo_search_partner",
+                    "odoo_get_task", "odoo_task_subtasks",
+                    "odoo_list_attachments", "odoo_get_attachment",
                 ],
                 "model_rules": {
                     "project.task":    {"read": True,  "create": True,  "write": True,  "unlink": False},
@@ -138,11 +141,13 @@ def policies_yaml(tmp_path: Path) -> Path:
                     "res.partner":     {"read": True,  "create": False, "write": False, "unlink": False},
                     "crm.lead":        {"read": True,  "create": False, "write": False, "unlink": False},
                     "mail.message":    {"read": True,  "create": True,  "write": False, "unlink": False},
+                    "ir.attachment":   {"read": True,  "create": False, "write": False, "unlink": False},
                 },
                 "rate_limit": {"requests_per_minute": 60, "writes_per_minute": 20},
             },
             "operations_policy": {
                 "allowed_tools": [
+                    "search", "fetch",
                     "odoo_who_am_i", "odoo_health",
                     "odoo_my_tasks", "odoo_my_tasks_today", "odoo_my_tasks_overdue",
                     "odoo_create_my_todo_apl", "odoo_create_project_task_apl",
@@ -165,6 +170,7 @@ def policies_yaml(tmp_path: Path) -> Path:
             },
             "medical_direction_policy": {
                 "allowed_tools": [
+                    "search", "fetch",
                     "odoo_who_am_i", "odoo_health",
                     "odoo_my_tasks", "odoo_my_tasks_today", "odoo_my_tasks_overdue",
                     "odoo_create_my_todo_apl", "odoo_create_project_task_apl",

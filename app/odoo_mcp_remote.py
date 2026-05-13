@@ -27,6 +27,7 @@ from app.token_registry import ActorEntry, TokenRegistry
 from app.tools import system as S, tasks as T, projects as P
 from app.tools import calendar as C, employees as E, crm as CR, partners as PA
 from app.tools import attachments as AT
+from app.tools import openai_compat as OC
 
 # ---------------------------------------------------------------------------
 # ContextVar: pasa el actor desde middleware a cada tool
@@ -178,19 +179,18 @@ mcp = FastMCP(
     'odoo-mcp-v2',
     instructions=(
         "Servidor MCP multiusuario para Odoo APL 2.0. "
-        "Conoces 3 actores con sus identidades propias (Willy=owner, Yuniesky=operations, "
+        "Conoces 3 actores con identidades propias (Willy=owner, Yuniesky=operations, "
         "Anet=medical_direction) y un policy engine deny-by-default. "
-        "Usa estas tools SIEMPRE que el usuario pregunte por: "
-        "sus tareas personales (odoo_my_tasks), tareas de hoy (odoo_my_tasks_today), "
-        "tareas vencidas (odoo_my_tasks_overdue), proyectos (odoo_list_projects, "
-        "odoo_get_project, odoo_project_tasks), eventos de calendario "
-        "(odoo_list_calendar_events), empleados (odoo_list_employees, odoo_search_employee), "
-        "leads CRM (odoo_list_crm_leads, odoo_get_crm_lead), contactos "
-        "(odoo_list_partners, odoo_search_partner), o quiere saber su identidad "
-        "Odoo (odoo_who_am_i). "
-        "Toda escritura sigue APL 2.0: título estructurado, descripción con 8 campos "
-        "obligatorios y read-after-write. No inventes datos: si la tool retorna vacío, "
-        "reporta vacío. No mientas sobre el estado de tools."
+        "DOS MODOS de discovery: "
+        "(1) Claude.ai descubre las 30 tools nativas odoo_* (odoo_my_tasks, "
+        "odoo_list_projects, odoo_get_task, etc.) — usalas directamente. "
+        "(2) ChatGPT chat-mode solo descubre `search(query)` y `fetch(id)` — "
+        "usalas SIEMPRE en ChatGPT para CUALQUIER consulta a Odoo. "
+        "search('mis tareas') devuelve tareas; search('proyectos') proyectos; "
+        "search('contactos') partners; etc. Despues fetch('task:42') para detalle. "
+        "Toda escritura sigue APL 2.0: titulo estructurado, descripcion 8 campos, "
+        "read-after-write. No inventes datos: si la tool retorna vacio, reporta "
+        "vacio. No mientas sobre el estado de tools."
     ),
     stateless_http=True,
     json_response=True,
@@ -376,6 +376,23 @@ async def odoo_list_attachments(ctx: Context, model: str, record_id: int, limit:
 async def odoo_get_attachment(ctx: Context, attachment_id: int) -> dict:
     """Obtiene los metadatos y URL de descarga de un adjunto específico por ID."""
     a = _a(); return await _audited(AT.odoo_get_attachment(a, _odoo, _policy, attachment_id), 'odoo_get_attachment', a)
+
+# ---------------------------------------------------------------------------
+# OpenAI ChatGPT chat-mode adapter: search + fetch
+# ChatGPT chat-mode solo descubre tools con estos 2 nombres exactos. Routean
+# internamente a las tools odoo_* segun query/id. Claude.ai sigue viendo todo.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def search(ctx: Context, query: str) -> dict:
+    """Busca tareas, proyectos, empleados, contactos, leads o eventos en Odoo segun el texto del query. Devuelve {results:[{id,title,text,url}]} con ids "<kind>:<num>" para usar con fetch(). Usa esta tool cuando el usuario pida ver/listar/buscar cualquier cosa en Odoo: tareas, proyectos, contactos, etc."""
+    a = _a(); return await _audited(OC.search(a, _odoo, _policy, query), 'search', a)
+
+@mcp.tool()
+async def fetch(ctx: Context, id: str) -> dict:
+    """Obtiene el detalle completo de un registro Odoo por id compuesto. El id debe ser "<kind>:<num>" donde kind es task/project/employee/partner/lead. Por ejemplo "task:42" o "project:7". Usalo despues de search() para profundizar en un resultado."""
+    a = _a(); return await _audited(OC.fetch(a, _odoo, _policy, id), 'fetch', a)
+
 
 # Aliases BLUE — compatibilidad con conectores que usan nombres originales
 odoo_personal_tasks  = odoo_my_tasks
