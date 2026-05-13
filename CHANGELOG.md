@@ -2,6 +2,75 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.3.3] — 2026-05-13 (Fase 4: parser de lenguaje natural server-side)
+
+### Hito tecnico
+
+**search() ahora entiende lenguaje natural ES para escritura.** ChatGPT
+chat-mode ya no necesita construir JSON action — basta con que invoque
+`search("crea tarea X en proyecto Y")` y el servidor extrae intent + campos
+via regex, auto-genera el payload APL 2.0 compliant y ejecuta directo.
+
+### Motivacion (verificado en audit 13-may-2026 22:18-22:44 UTC)
+
+Tras desplegar v0.3.2 con instructions directivas, Yuniesky en ChatGPT envio
+22+ search/fetch pero **0 entries con `action: create_*`**. Patron repetido:
+`latency_ms: 0, result_count: 1` (firma de `_help_write_response()`). ChatGPT
+recibia la guia con el template JSON y NO reintentaba — devolvia markdown al
+usuario "no puedo escribir desde esta sesion". Confirmado: el modelo se rinde
+aunque el servidor exponga la capacidad.
+
+Conclusion: la inteligencia debe vivir en el servidor, no en el modelo.
+
+### Added
+
+- `app/tools/openai_nl_parser.py` (~270 LOC) — modulo nuevo con regex+heuristicas
+  que parsean queries ES naturales a payloads `{"action": ...}` listos para
+  `_execute_action()`. Soporta:
+  - **whoami**: "quien soy", "mi identidad", "mis datos", "mi rol"
+  - **close_task**: "cierra/finaliza tarea N con evidencia: ..." (extrae id +
+    evidencia desde el lenguaje natural, default `done_stage_id=1`)
+  - **cancel_task**: "cancela tarea N motivo: ..."
+  - **move_task**: "mueve tarea N a etapa M"
+  - **update_task**: "actualiza tarea N prioridad alta/media/baja/P0-P3"
+  - **create_project**: "crea proyecto 'Nombre'"
+  - **create_todo**: "crea todo/pendiente 'titulo' [deadline: YYYY-MM-DD]"
+  - **create_task**: "crea tarea 'titulo' en proyecto N" o "...en proyecto
+    Nombre" (resuelve name->id via `odoo.search_read('project.project',...)`)
+- Builders APL 2.0 auto-fill: `_build_apl_title()` envuelve titulos naturales
+  con `[APL 2.0][P2][Area][Tipo]`; `_build_apl_description()` genera los 8
+  campos obligatorios usando el titulo como semilla. El usuario edita despues.
+- `tests/test_openai_nl_parser.py` — 20 tests nuevos cubriendo cada accion +
+  builders + queries que NO deben matchear (lectura pura, vacios).
+
+### Changed
+
+- `app/tools/openai_compat.py::search()` — el Path 2 (verbos de escritura sin
+  JSON) ahora primero llama `nl_parser.try_parse()`. Si extrae payload valido,
+  ejecuta con `_execute_action()` directo. Solo si el query es ambiguo o le
+  faltan datos minimos, cae al `_help_write_response()` anterior.
+
+### Result
+
+Yuniesky en ChatGPT puede ahora:
+- `search("crea tarea 'Smoke test' en proyecto Gerente de Operaciones")` ->
+  task creado, project_id resuelto por name, titulo y descripcion APL 2.0
+  auto-rellenados, deadline = mañana.
+- `search("cierra tarea 128 con evidencia: termine el QA")` -> tarea cerrada
+  con la evidencia capturada del lenguaje natural.
+- `search("quien soy")` -> identidad sin necesidad de JSON.
+
+Tests: **135/135 verde** (110 previos + 20 nuevos del parser + 5 que faltaban).
+
+### Files
+
+- `app/tools/openai_nl_parser.py` (nuevo)
+- `app/tools/openai_compat.py` (modificado, +5 LOC)
+- `tests/test_openai_nl_parser.py` (nuevo)
+- `CHANGELOG.md` (este entry)
+
+---
+
 ## [0.3.1] — 2026-05-13 (Yuniesky owner-equivalent + ChatGPT escribiendo en Odoo)
 
 ### Hito tecnico

@@ -37,6 +37,7 @@ from app.tools import (
     system as sys_tools,
     tasks as tsk,
 )
+from app.tools import openai_nl_parser as nl_parser
 
 
 # Patrones de intent en orden de precedencia. El primero que matchea decide.
@@ -459,8 +460,13 @@ async def search(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
     if action_payload:
         return await _execute_action(action_payload, actor, odoo, policy)
 
-    # Path 2: verbos de escritura sin JSON -> guiar al modelo.
+    # Path 2: verbos de escritura sin JSON -> intentar parser NL antes de help.
+    # Fase 4 (13-may-2026): ChatGPT chat-mode no reintenta con JSON tras help.
+    # El servidor extrae intent+campos del lenguaje natural y ejecuta directo.
     if _WRITE_VERB_RE.search(q):
+        nl_payload = await nl_parser.try_parse(q, actor, odoo, policy)
+        if nl_payload:
+            return await _execute_action(nl_payload, actor, odoo, policy)
         return _help_write_response()
 
     # Path 3: lectura normal por intent.
