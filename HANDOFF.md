@@ -2,13 +2,23 @@
 
 > Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~21:40 hrs.
 
-## Estado actual (cierre de jornada 13 may 2026 — GREEN + ChatGPT funcional)
+## Estado actual (cierre extendido 13 may 2026 ~22:20 UTC — Yuniesky escribiendo en Odoo desde ChatGPT)
 
-### GREEN operativo en producción
-- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), imagen `odoo-mcp:multiuser-v0.2.2`.
-- BLUE `https://mcp.ovnisystem.com/mcp` — intocable, 9 tools funcionando. Willy lo conserva como fallback en ChatGPT mientras se valida GREEN con Yuniesky+Anet.
-- 13 commits en `feature/v2-multiusuario`. Últimos 3 (hoy): `092dd4c` (formato OpenAI estricto), `954ae9a` (adapter search/fetch), `0552f91` (normalizer Odoo).
-- Tests local: **87/87 verde** (18 nuevos en `test_openai_compat.py`).
+### GREEN operativo en producción con paridad total Yuniesky/Willy
+- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), imagen `odoo-mcp:multiuser-v0.3.1`.
+- BLUE `https://mcp.ovnisystem.com/mcp` — intocable.
+- 16 commits en `feature/v2-multiusuario`. Últimos 5 (hoy): `0552f91` (normalizer Odoo), `954ae9a` (adapter search/fetch), `092dd4c` (formato OpenAI estricto), `80f1842` (8 write tools + Yuniesky owner-equivalent), `ebf33de` (JSON action protocol).
+- Tests local: **110/110 verde**.
+
+### Hito final del día: Yuniesky en ChatGPT crea tareas en Odoo
+
+Verificado en producción 22:16:27 UTC. Yuniesky en ChatGPT envió un query `search({"action":"create_task",...})` y el MCP creó `task:128` en proyecto "Gerente de Operaciones" (project_id=3). Audit log confirma. Visible en Odoo web.
+
+Protocolo definitivo para ChatGPT chat-mode:
+- **Read**: `search("mis tareas")` / `fetch("task:42")`.
+- **Write**: `search("{...JSON con action...}")`. Acciones: create_task, create_todo, update_task, move_task, close_task, cancel_task, create_project, create_event.
+
+Si el modelo escribe "crea tarea" sin JSON, recibe un help_response con template y reintenta con el formato correcto.
 
 ### Hito del día (13 may): ChatGPT chat-mode funciona end-to-end
 

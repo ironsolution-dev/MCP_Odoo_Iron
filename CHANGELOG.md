@@ -2,6 +2,98 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.3.1] — 2026-05-13 (Yuniesky owner-equivalent + ChatGPT escribiendo en Odoo)
+
+### Hito tecnico
+
+**ChatGPT chat-mode ahora puede ESCRIBIR en Odoo via el protocolo JSON action.**
+
+Verificacion en produccion 22:16:27 UTC: Yuniesky en ChatGPT envio
+`search({"action":"create_task","project_id":3,...})` y el servidor MCP creo
+`task:128` en el proyecto "Gerente de Operaciones" con titulo APL 2.0
+valido, deadline 2026-05-15 y descripcion con 8 campos. Audit log confirmo
+`result_count:1` con `tool:"search"`. Visible en Odoo web.
+
+### Added
+
+#### Fase 1: Yuniesky con owner-equivalent privileges (commit `80f1842`)
+- `config/actors.yaml.example`: yuniesky.policy = owner_policy (antes
+  operations_policy). Razon: Yuniesky no tiene Claude.ai, por tanto su
+  UX en ChatGPT debe igualar a la de Willy en Claude.ai. role queda como
+  "operations" solo para audit log; los permisos efectivos son owner.
+- En produccion: `/opt/odoo-mcp-v2/secrets/actors.yaml` editado via sed.
+
+#### Fase 2: 8 write tools en openai_compat.py (commit `80f1842`)
+- `create_task(project_id, title, description, deadline, area, task_type, priority="P2")` -> odoo_create_project_task_apl
+- `create_todo(title, description, deadline, area, task_type, priority="P2")` -> odoo_create_my_todo_apl
+- `update_task(id, changes)` -> odoo_update_task_apl (acepta "task:42" o "42")
+- `move_task(id, stage_id)` -> odoo_move_task
+- `close_task(id, evidence, done_stage_id)` -> odoo_mark_task_done
+- `cancel_task(id, reason, cancelled_stage_id)` -> odoo_cancel_task
+- `create_project(name, description, user_id)` -> odoo_create_project
+- `create_event(name, start, stop, description, location, partner_ids, allday)` -> odoo_create_calendar_event
+
+Cada wrapper: valida APL 2.0 (6 campos obligatorios) + read-after-write +
+devuelve formato OpenAI compat con id compuesto. Helper `_parse_id()` acepta
+"task:42", "42" int o "42" str.
+
+#### Fase 3: search() con JSON action protocol (commit `ebf33de`)
+
+ChatGPT chat-mode no descubre las 8 write tools individualmente (verificado
+con audit log: cero invocaciones a create_task antes de Fase 3). Solucion:
+sobrecargar search() para detectar JSON embebido con clave "action" y
+enrutar a la write tool correspondiente.
+
+Tres paths en search():
+1. **JSON action** (write): query contiene `{"action":"...","..."}` -> ejecuta.
+2. **Verbos sin JSON** (educacion): query tiene "crea/actualiza/cierra/..."
+   pero no JSON -> devuelve help_response con template del formato JSON
+   para que el modelo aprenda y reintente.
+3. **Read** (default): comportamiento original (clasificacion por intent).
+
+Acciones soportadas: create_task, create_todo, update_task, move_task,
+close_task, cancel_task, create_project, create_event.
+
+Manejo de errores estructurado: KeyError (falta campo) -> error:missing_field,
+ValueError -> error:invalid_value, PermissionError -> error:permission,
+Exception generica -> error:execution. Cada error vuelve como item dentro
+de `results` (sin keys extras a nivel raiz, compatible con OpenAI strict spec).
+
+Instructions del FastMCP actualizadas con ejemplo embebido del formato JSON
+y lista de acciones validas — el modelo de ChatGPT aprende el protocolo
+desde la connect.
+
+### Tests
+
+- 110/110 verde (87 + 13 fase 2 + 10 fase 3).
+- Cobertura: parse_id (4), write tools individuales (8), JSON action exec
+  (4), help response (2), invalid action/missing field (2), backward compat
+  read path (1).
+
+### QA produccion verificado 13-may-2026 22:16 UTC
+
+| Capacidad | Yuniesky ChatGPT | Evidencia |
+|---|---|---|
+| search lectura entidades | ✅ | audit 22:08, result_count 5-6 |
+| fetch drill-down | ✅ | audit 22:08:47, 3 fetch consecutivos |
+| **create_task via JSON action** | ✅ | **task:128 creado, audit 22:16:27** |
+
+### Estado de deploy
+
+- VPS GREEN corriendo `odoo-mcp:multiuser-v0.3.1` (commit `ebf33de`).
+- `/opt/odoo-mcp-v2/secrets/actors.yaml` actualizado (yuniesky -> owner_policy).
+- `/opt/odoo-mcp-v2/secrets/policies.yaml` actualizado con los 8 write tools.
+- BLUE intocable, Willy lo conserva como fallback.
+
+### Limitaciones operativas (no son bugs)
+
+- **El modelo de ChatGPT debe enviar JSON valido en el query.** Si Yuniesky
+  pide "crea tarea X" sin JSON, ChatGPT recibe el template help y debe
+  reintentar con el formato correcto. En practica funciona bien con prompts
+  estructurados como los que dimos en el QA.
+- **APL 2.0 estricto:** title debe matchear regex `[APL 2.0][P0-3][Area][Tipo]` y description debe tener los 8 campos. Si falta algo, el servidor
+  devuelve ValidationError estructurada y ChatGPT puede corregir.
+
 ## [0.2.2] — 2026-05-13 (adapter ChatGPT chat-mode + normalizer + audit mejorado)
 
 ### Added
