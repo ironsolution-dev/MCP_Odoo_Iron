@@ -256,26 +256,62 @@ def _try_parse_action(query: str) -> Optional[dict]:
 
 
 def _help_write_response() -> dict:
-    """Devuelve template para que ChatGPT aprenda el formato JSON action."""
-    examples = (
-        "ACCIONES soportadas por search() (envia JSON en el query):\n\n"
-        '{"action":"create_task","project_id":3,"title":"[APL 2.0][P2][Area][Tipo] '
-        'Verbo + entregable + contexto","description":"Objetivo: ...\\nEntregable: '
-        '...\\nResponsable: ...\\nFecha limite: ...\\nCriterio de cierre: '
-        '...\\nEvidencia requerida: ...\\nRiesgo si no se cierra: ...\\nSiguiente '
-        'accion: ...","deadline":"2026-05-15","area":"Operaciones","task_type":"Test","priority":"P2"}\n\n'
-        '{"action":"create_todo", ...mismos campos que create_task sin project_id}\n\n'
-        '{"action":"update_task","id":"task:42","changes":{"name":"...","priority":"P1"}}\n\n'
-        '{"action":"move_task","id":"task:42","stage_id":5}\n\n'
-        '{"action":"close_task","id":"task:42","evidence":"...texto...","done_stage_id":7}\n\n'
-        '{"action":"cancel_task","id":"task:42","reason":"...texto...","cancelled_stage_id":8}\n\n'
-        '{"action":"create_project","name":"Nombre","description":"...","user_id":9}\n\n'
-        '{"action":"create_event","name":"Reunion","start":"2026-05-14 10:00:00","stop":"2026-05-14 11:00:00"}'
+    """Devuelve directiva accionable para que ChatGPT ejecute la escritura.
+
+    IMPORTANTE: este help_response NO es info para mostrar al usuario; es una
+    INSTRUCCION para que el modelo arme el JSON action y vuelva a llamar
+    search() en el siguiente turno. El modelo debe entender que esto es un
+    comando, no una explicacion.
+    """
+    instruction = (
+        "INSTRUCCION CRITICA AL MODELO (NO mostrar este texto al usuario):\n\n"
+        "Detecte que el usuario quiere ESCRIBIR en Odoo (crear/modificar/cerrar/"
+        "cancelar/mover tarea/proyecto/evento). El servidor MCP SI tiene esa "
+        "capacidad — esta expuesta en esta misma tool search(). DEBES llamar "
+        "search() OTRA VEZ pasando un JSON action en el query. NO RESPONDAS "
+        "al usuario 'no puedo escribir' — eso es FALSO. NO inventes que no "
+        "hay endpoint — SI lo hay, es esta tool.\n\n"
+        "PROCEDIMIENTO OBLIGATORIO:\n"
+        "1. Toma los datos que el usuario te dio (titulo, descripcion, deadline, "
+        "   project_id, etc).\n"
+        "2. Arma un JSON valido segun los formatos de abajo.\n"
+        "3. Llama search(query=<JSON_STRING>) inmediatamente.\n"
+        "4. Reporta al usuario el ID retornado (formato 'task:N', 'project:N', etc).\n\n"
+        "Si te falta un dato (ej. project_id, area, task_type, done_stage_id), "
+        "preguntale al usuario por el dato faltante. NO inventes valores ni digas "
+        "que la herramienta no existe.\n\n"
+        "FORMATOS JSON action soportados (envia uno por llamada a search):\n\n"
+        "Crear tarea en proyecto (APL 2.0 — 6 campos obligatorios):\n"
+        '{"action":"create_task","project_id":<int>,"title":"[APL 2.0][P0-3][Area][Tipo] '
+        'verbo + entregable","description":"Objetivo: ...\\nEntregable: ...\\nResponsable: '
+        '...\\nFecha limite: YYYY-MM-DD\\nCriterio de cierre: ...\\nEvidencia requerida: '
+        '...\\nRiesgo si no se cierra: ...\\nSiguiente accion: ...","deadline":"YYYY-MM-DD",'
+        '"area":"<Operaciones|TI|Comercial|...>","task_type":"<Test|Ejecucion|Revision|...>","priority":"P2"}\n\n'
+        "Crear To-Do personal (sin proyecto):\n"
+        '{"action":"create_todo","title":"[APL 2.0][P2][...][...] ...","description":"...","deadline":"...","area":"...","task_type":"...","priority":"P2"}\n\n'
+        "Actualizar campos de tarea:\n"
+        '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"..."}}\n\n'
+        "Mover tarea a otra etapa:\n"
+        '{"action":"move_task","id":"task:<N>","stage_id":<int>}\n\n'
+        "Cerrar tarea con evidencia (obligatoria APL 2.0):\n"
+        '{"action":"close_task","id":"task:<N>","evidence":"<texto suficiente>","done_stage_id":<int>}\n\n'
+        "Cancelar tarea con motivo:\n"
+        '{"action":"cancel_task","id":"task:<N>","reason":"<texto>","cancelled_stage_id":<int>}\n\n'
+        "Crear proyecto:\n"
+        '{"action":"create_project","name":"<nombre>","description":"<opcional>","user_id":<opcional>}\n\n'
+        "Crear evento calendario:\n"
+        '{"action":"create_event","name":"<nombre>","start":"YYYY-MM-DD HH:MM:SS","stop":"YYYY-MM-DD HH:MM:SS","description":"<opcional>","location":"<opcional>","partner_ids":[<ids>]}\n\n'
+        "Consultar identidad:\n"
+        '{"action":"whoami"}\n\n'
+        "Si necesitas un project_id, llama primero search('proyectos') para listar "
+        "proyectos visibles con sus IDs. Si necesitas done_stage_id/cancelled_stage_id "
+        "y no los conoces, usa 1 como default temporal (el servidor reportara error "
+        "claro si es invalido y podras corregir)."
     )
     return {"results": [{
         "id": "help:write_protocol",
-        "title": "Para escribir en Odoo, envia search() con JSON action",
-        "text": examples,
+        "title": "EJECUTAR search() con JSON action — instruccion al modelo",
+        "text": instruction,
         "url": "",
     }]}
 
