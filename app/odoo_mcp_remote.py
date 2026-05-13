@@ -56,7 +56,15 @@ _JSON_401 = (
     b'"error":{"code":-32001,"message":"Unauthorized: invalid_token"}}'
 )
 _JSON_DISCOVERY = (
-    b'{"jsonrpc":"2.0","result":{"name":"odoo-mcp-v2","version":"0.1.0"}}'
+    b'{"jsonrpc":"2.0","result":{'
+    b'"name":"odoo-mcp-v2",'
+    b'"version":"0.2.0",'
+    b'"description":"MCP Odoo APL 2.0 multiusuario. Permite a Willy, Yuniesky y Anet '
+    b'operar tareas, proyectos, calendario, CRM, empleados y contactos en Odoo desde '
+    b'Claude.ai o ChatGPT con identidad propia y policy engine deny-by-default.",'
+    b'"capabilities":{"tools":true,"resources":false,"prompts":false},'
+    b'"protocolVersion":"2024-11-05"'
+    b'}}'
 )
 
 
@@ -181,8 +189,29 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
 # ---------------------------------------------------------------------------
 # FastMCP + registro de tools
 # ---------------------------------------------------------------------------
-mcp = FastMCP('odoo-mcp-v2', stateless_http=True, json_response=True,
-              host='0.0.0.0', port=8000)
+mcp = FastMCP(
+    'odoo-mcp-v2',
+    instructions=(
+        "Servidor MCP multiusuario para Odoo APL 2.0. "
+        "Conoces 3 actores con sus identidades propias (Willy=owner, Yuniesky=operations, "
+        "Anet=medical_direction) y un policy engine deny-by-default. "
+        "Usa estas tools SIEMPRE que el usuario pregunte por: "
+        "sus tareas personales (odoo_my_tasks), tareas de hoy (odoo_my_tasks_today), "
+        "tareas vencidas (odoo_my_tasks_overdue), proyectos (odoo_list_projects, "
+        "odoo_get_project, odoo_project_tasks), eventos de calendario "
+        "(odoo_list_calendar_events), empleados (odoo_list_employees, odoo_search_employee), "
+        "leads CRM (odoo_list_crm_leads, odoo_get_crm_lead), contactos "
+        "(odoo_list_partners, odoo_search_partner), o quiere saber su identidad "
+        "Odoo (odoo_who_am_i). "
+        "Toda escritura sigue APL 2.0: título estructurado, descripción con 8 campos "
+        "obligatorios y read-after-write. No inventes datos: si la tool retorna vacío, "
+        "reporta vacío. No mientas sobre el estado de tools."
+    ),
+    stateless_http=True,
+    json_response=True,
+    host='0.0.0.0',
+    port=8000,
+)
 
 
 @mcp.tool()
