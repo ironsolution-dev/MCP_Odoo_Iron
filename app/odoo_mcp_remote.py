@@ -402,6 +402,57 @@ async def fetch(ctx: Context, id: str) -> dict:
     a = _a(); return await _audited(OC.fetch(a, _odoo, _policy, id), 'fetch', a)
 
 
+# Write tools — nombres simples que ChatGPT chat-mode puede descubrir. Cada uno
+# enruta a la tool odoo_* nativa correspondiente con APL 2.0 + read-after-write.
+
+@mcp.tool()
+async def create_task(ctx: Context, project_id: int, title: str, description: str,
+                       deadline: str, area: str, task_type: str,
+                       priority: str = "P2") -> dict:
+    """Crea una tarea APL 2.0 dentro de un proyecto. project_id obligatorio. APL 2.0 exige 6 campos: title (6+ chars), description (con Objetivo/Resultado/Pasos/Dependencias/Riesgos/Validacion/Plazo/Notas), deadline (YYYY-MM-DD), area (dominio funcional), task_type (tipo de trabajo), priority (P1/P2/P3, default P2)."""
+    a = _a(); return await _audited(OC.create_task(a, _odoo, _policy, project_id, title, description, deadline, area, task_type, priority), 'create_task', a)
+
+@mcp.tool()
+async def create_todo(ctx: Context, title: str, description: str,
+                       deadline: str, area: str, task_type: str,
+                       priority: str = "P2") -> dict:
+    """Crea un To-Do personal APL 2.0 sin proyecto. Mismos 6 campos APL que create_task pero sin project_id."""
+    a = _a(); return await _audited(OC.create_todo(a, _odoo, _policy, title, description, deadline, area, task_type, priority), 'create_todo', a)
+
+@mcp.tool()
+async def update_task(ctx: Context, id: str, changes: dict) -> dict:
+    """Actualiza campos de una tarea. id puede ser "task:42" o "42". Campos editables: name, description, priority, date_deadline, stage_id, tag_ids."""
+    a = _a(); return await _audited(OC.update_task(a, _odoo, _policy, id, changes), 'update_task', a)
+
+@mcp.tool()
+async def move_task(ctx: Context, id: str, stage_id: int) -> dict:
+    """Mueve una tarea a otra etapa. Usa odoo_validate_apl_stages para conocer stage_ids disponibles."""
+    a = _a(); return await _audited(OC.move_task(a, _odoo, _policy, id, stage_id), 'move_task', a)
+
+@mcp.tool()
+async def close_task(ctx: Context, id: str, evidence: str, done_stage_id: int) -> dict:
+    """Cierra una tarea con evidencia obligatoria (APL 2.0). La evidencia queda en el chatter. done_stage_id es el ID de la etapa Done del flujo APL."""
+    a = _a(); return await _audited(OC.close_task(a, _odoo, _policy, id, evidence, done_stage_id), 'close_task', a)
+
+@mcp.tool()
+async def cancel_task(ctx: Context, id: str, reason: str, cancelled_stage_id: int) -> dict:
+    """Cancela una tarea registrando el motivo en el chatter. cancelled_stage_id es el ID de la etapa Cancelled del flujo APL."""
+    a = _a(); return await _audited(OC.cancel_task(a, _odoo, _policy, id, reason, cancelled_stage_id), 'cancel_task', a)
+
+@mcp.tool()
+async def create_project(ctx: Context, name: str, description: str = None,
+                          user_id: int = None) -> dict:
+    """Crea un proyecto nuevo en Odoo. name obligatorio. description y user_id (responsable) opcionales."""
+    a = _a(); return await _audited(OC.create_project(a, _odoo, _policy, name, description, user_id), 'create_project', a)
+
+@mcp.tool()
+async def create_event(ctx: Context, name: str, start: str, stop: str,
+                        description: str = None, location: str = None,
+                        partner_ids: list = None, allday: bool = False) -> dict:
+    """Crea un evento de calendario. start y stop en ISO (YYYY-MM-DD HH:MM:SS). partner_ids es lista de IDs de res.partner invitados."""
+    a = _a(); return await _audited(OC.create_event(a, _odoo, _policy, name, start, stop, description, location, partner_ids, allday), 'create_event', a)
+
+
 # Aliases BLUE — compatibilidad con conectores que usan nombres originales
 odoo_personal_tasks  = odoo_my_tasks
 odoo_test_connection = odoo_who_am_i

@@ -117,6 +117,9 @@ def policies_yaml(tmp_path: Path) -> Path:
             "owner_policy": {
                 "allowed_tools": [
                     "search", "fetch",
+                    "create_task", "create_todo", "update_task",
+                    "move_task", "close_task", "cancel_task",
+                    "create_project", "create_event",
                     "odoo_who_am_i", "odoo_health", "odoo_validate_apl_stages",
                     "odoo_my_tasks", "odoo_my_tasks_today", "odoo_my_tasks_overdue",
                     "odoo_create_my_todo_apl", "odoo_create_project_task_apl",
@@ -148,6 +151,9 @@ def policies_yaml(tmp_path: Path) -> Path:
             "operations_policy": {
                 "allowed_tools": [
                     "search", "fetch",
+                    "create_task", "create_todo", "update_task",
+                    "move_task", "close_task", "cancel_task",
+                    "create_project", "create_event",
                     "odoo_who_am_i", "odoo_health",
                     "odoo_my_tasks", "odoo_my_tasks_today", "odoo_my_tasks_overdue",
                     "odoo_create_my_todo_apl", "odoo_create_project_task_apl",
@@ -171,6 +177,9 @@ def policies_yaml(tmp_path: Path) -> Path:
             "medical_direction_policy": {
                 "allowed_tools": [
                     "search", "fetch",
+                    "create_task", "create_todo", "update_task",
+                    "move_task", "close_task", "cancel_task",
+                    "create_project", "create_event",
                     "odoo_who_am_i", "odoo_health",
                     "odoo_my_tasks", "odoo_my_tasks_today", "odoo_my_tasks_overdue",
                     "odoo_create_my_todo_apl", "odoo_create_project_task_apl",

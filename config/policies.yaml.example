@@ -53,8 +53,18 @@ policies:
   # ----------------------------------------------------------------------
   owner_policy:
     allowed_tools:
-      - search           # ChatGPT chat-mode adapter (enruta a my_tasks/list_*)
-      - fetch            # ChatGPT chat-mode adapter (enruta a get_*)
+      # ChatGPT chat-mode adapter — nombres simples que el modelo descubre
+      - search           # READ: enruta a my_tasks/list_projects/list_employees/etc
+      - fetch            # READ: enruta a get_task/get_project/get_employee/etc
+      - create_task      # WRITE: tarea en proyecto (APL 2.0)
+      - create_todo      # WRITE: To-Do personal (APL 2.0)
+      - update_task      # WRITE: cambia campos editables
+      - move_task        # WRITE: mueve entre etapas
+      - close_task       # WRITE: cierre con evidencia
+      - cancel_task      # WRITE: cancelacion con motivo
+      - create_project   # WRITE: proyecto nuevo
+      - create_event     # WRITE: evento calendario
+      # Tools odoo_* nativas — Claude.ai las descubre directamente
       - odoo_who_am_i
       - odoo_health
       - odoo_validate_apl_stages
@@ -109,9 +119,18 @@ policies:
   # operations_policy — Yuniesky
   # ----------------------------------------------------------------------
   operations_policy:
+    # NOTA: Yuniesky usa owner_policy desde 13-may-2026 (paridad UX ChatGPT).
+    # Esta policy queda para futuros actores con rol "operations" estricto.
     allowed_tools:
-      - search           # ChatGPT chat-mode adapter (enruta a my_tasks/list_*)
-      - fetch            # ChatGPT chat-mode adapter (enruta a get_*)
+      - search
+      - fetch
+      - create_task
+      - create_todo
+      - update_task
+      - move_task
+      - close_task
+      - cancel_task
+      - create_event
       - odoo_who_am_i
       - odoo_health
       - odoo_my_tasks
@@ -156,8 +175,15 @@ policies:
   # ----------------------------------------------------------------------
   medical_direction_policy:
     allowed_tools:
-      - search           # ChatGPT chat-mode adapter (enruta a my_tasks/list_*)
-      - fetch            # ChatGPT chat-mode adapter (enruta a get_*)
+      - search
+      - fetch
+      - create_task
+      - create_todo
+      - update_task
+      - move_task
+      - close_task
+      - cancel_task
+      - create_event
       - odoo_who_am_i
       - odoo_health
       - odoo_my_tasks

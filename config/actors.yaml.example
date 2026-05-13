@@ -26,7 +26,10 @@ actors:
     odoo_db_env: ODOO_DB
     odoo_username_env: ODOO_USERNAME_YUNIESKY
     odoo_api_key_env: ODOO_API_KEY_YUNIESKY
-    policy: operations_policy
+    # Yuniesky usa owner_policy (decision 13-may-2026 — paridad UX en ChatGPT
+    # con Willy, ya que Yuniesky no tiene Claude.ai). Mantiene role=operations
+    # solo para audit log; los permisos efectivos son los de owner.
+    policy: owner_policy
 
   anet:
     enabled: true
