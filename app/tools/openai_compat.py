@@ -20,9 +20,10 @@ puede descubrir. Sec 4.1 ADR-010 (dual connector Claude.ai+ChatGPT).
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Optional
 
 from app.odoo_client import OdooClient
 from app.policy_engine import PolicyEngine
@@ -181,6 +182,191 @@ async def _route(intent: str, actor: ActorEntry, odoo: OdooClient,
 
 
 # ---------------------------------------------------------------------------
+# Write protocol: search() acepta JSON embebido con {"action": "..."}
+# ChatGPT chat-mode solo descubre tools `search`/`fetch`. Para que pueda
+# escribir, sobrecargamos search() para detectar JSON action en el query
+# y ejecutar la operacion correspondiente. Verbose protocol — la confiabilidad
+# depende de que el modelo siga el formato JSON que documentamos en las
+# instructions del MCP. Fallback: si detecta verbos de escritura sin JSON,
+# devuelve un help response con el template correcto.
+# ---------------------------------------------------------------------------
+
+# Verbos de accion que sugieren intent de escritura (fallback when no JSON).
+_WRITE_VERB_RE = re.compile(
+    r"\b(crea|crear|cree|nueva|nuevo|agrega|añade|"
+    r"actualiza|modifica|edita|cambia|"
+    r"cierra|finaliza|completa|"
+    r"cancela|anula|"
+    r"mueve|mover|"
+    r"programa)\b",
+    re.IGNORECASE,
+)
+
+# Acciones soportadas por _execute_action.
+_VALID_ACTIONS = {
+    "create_task", "create_todo", "update_task",
+    "move_task", "close_task", "cancel_task",
+    "create_project", "create_event",
+}
+
+
+def _try_parse_action(query: str) -> Optional[dict]:
+    """Si el query contiene un objeto JSON con clave 'action', devolverlo.
+    Acepta JSON embebido en cualquier posicion del query."""
+    if not query or "{" not in query:
+        return None
+    # Match el objeto JSON mas grande en el query (greedy).
+    match = re.search(r"\{.*\}", query, re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(data, dict) and "action" in data:
+        return data
+    return None
+
+
+def _help_write_response() -> dict:
+    """Devuelve template para que ChatGPT aprenda el formato JSON action."""
+    examples = (
+        "ACCIONES soportadas por search() (envia JSON en el query):\n\n"
+        '{"action":"create_task","project_id":3,"title":"[APL 2.0][P2][Area][Tipo] '
+        'Verbo + entregable + contexto","description":"Objetivo: ...\\nEntregable: '
+        '...\\nResponsable: ...\\nFecha limite: ...\\nCriterio de cierre: '
+        '...\\nEvidencia requerida: ...\\nRiesgo si no se cierra: ...\\nSiguiente '
+        'accion: ...","deadline":"2026-05-15","area":"Operaciones","task_type":"Test","priority":"P2"}\n\n'
+        '{"action":"create_todo", ...mismos campos que create_task sin project_id}\n\n'
+        '{"action":"update_task","id":"task:42","changes":{"name":"...","priority":"P1"}}\n\n'
+        '{"action":"move_task","id":"task:42","stage_id":5}\n\n'
+        '{"action":"close_task","id":"task:42","evidence":"...texto...","done_stage_id":7}\n\n'
+        '{"action":"cancel_task","id":"task:42","reason":"...texto...","cancelled_stage_id":8}\n\n'
+        '{"action":"create_project","name":"Nombre","description":"...","user_id":9}\n\n'
+        '{"action":"create_event","name":"Reunion","start":"2026-05-14 10:00:00","stop":"2026-05-14 11:00:00"}'
+    )
+    return {"results": [{
+        "id": "help:write_protocol",
+        "title": "Para escribir en Odoo, envia search() con JSON action",
+        "text": examples,
+        "url": "",
+    }]}
+
+
+def _action_error(detail: str, kind: str = "error:action") -> dict:
+    return {"results": [{
+        "id": kind,
+        "title": "Accion fallida",
+        "text": detail,
+        "url": "",
+    }]}
+
+
+async def _execute_action(payload: dict, actor: ActorEntry, odoo: OdooClient,
+                          policy: PolicyEngine) -> dict:
+    """Dispatcher: del JSON action al write tool correspondiente."""
+    action = str(payload.get("action", "")).strip().lower()
+    if action not in _VALID_ACTIONS:
+        return _action_error(
+            f"action='{action}' no soportado. Validas: {sorted(_VALID_ACTIONS)}",
+            kind="error:unknown_action",
+        )
+    try:
+        if action == "create_task":
+            result = await create_task(
+                actor, odoo, policy,
+                project_id=int(payload["project_id"]),
+                title=payload["title"],
+                description=payload["description"],
+                deadline=payload["deadline"],
+                area=payload["area"],
+                task_type=payload["task_type"],
+                priority=payload.get("priority", "P2"),
+            )
+        elif action == "create_todo":
+            result = await create_todo(
+                actor, odoo, policy,
+                title=payload["title"],
+                description=payload["description"],
+                deadline=payload["deadline"],
+                area=payload["area"],
+                task_type=payload["task_type"],
+                priority=payload.get("priority", "P2"),
+            )
+        elif action == "update_task":
+            result = await update_task(
+                actor, odoo, policy,
+                id=payload["id"],
+                changes=payload["changes"],
+            )
+        elif action == "move_task":
+            result = await move_task(
+                actor, odoo, policy,
+                id=payload["id"],
+                stage_id=int(payload["stage_id"]),
+            )
+        elif action == "close_task":
+            result = await close_task(
+                actor, odoo, policy,
+                id=payload["id"],
+                evidence=payload["evidence"],
+                done_stage_id=int(payload["done_stage_id"]),
+            )
+        elif action == "cancel_task":
+            result = await cancel_task(
+                actor, odoo, policy,
+                id=payload["id"],
+                reason=payload["reason"],
+                cancelled_stage_id=int(payload["cancelled_stage_id"]),
+            )
+        elif action == "create_project":
+            result = await create_project(
+                actor, odoo, policy,
+                name=payload["name"],
+                description=payload.get("description"),
+                user_id=payload.get("user_id"),
+            )
+        elif action == "create_event":
+            result = await create_event(
+                actor, odoo, policy,
+                name=payload["name"],
+                start=payload["start"],
+                stop=payload["stop"],
+                description=payload.get("description"),
+                location=payload.get("location"),
+                partner_ids=payload.get("partner_ids"),
+                allday=payload.get("allday", False),
+            )
+        else:
+            return _action_error(f"accion {action} sin handler")
+    except KeyError as exc:
+        return _action_error(
+            f"falta campo obligatorio en payload: {exc.args[0]}",
+            kind="error:missing_field",
+        )
+    except (ValueError, TypeError) as exc:
+        return _action_error(
+            f"tipo invalido: {exc}",
+            kind="error:invalid_value",
+        )
+    except PermissionError as exc:
+        return _action_error(
+            f"acceso denegado: {exc}",
+            kind="error:permission",
+        )
+    except Exception as exc:
+        return _action_error(
+            f"{exc.__class__.__name__}: {exc}",
+            kind="error:execution",
+        )
+
+    # Envolver resultado en formato OpenAI search.
+    if isinstance(result, dict) and result.get("error"):
+        return _action_error(str(result), kind="error:tool_error")
+    return {"results": [result]}
+
+
+# ---------------------------------------------------------------------------
 # Public: search / fetch
 # ---------------------------------------------------------------------------
 
@@ -188,22 +374,39 @@ async def search(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                  query: str) -> dict:
     """Busca entidades Odoo segun el query (ChatGPT chat-mode compatible).
 
-    Devuelve {"results": [...]} con ids "<kind>:<num>". Cada result tiene
-    id, title, text, url (segun spec OpenAI search/fetch).
+    Modo READ (default): query natural -> retorna entidades.
+    Modo WRITE: query contiene JSON con clave "action" -> ejecuta accion.
+
+    Acciones soportadas via JSON action (envia el JSON dentro del query):
+    create_task, create_todo, update_task, move_task, close_task,
+    cancel_task, create_project, create_event.
+
+    Si el query tiene verbos de escritura pero NO JSON, devuelve un template
+    con el formato correcto para que el modelo aprenda.
+
+    Devuelve {"results": [...]} con ids "<kind>:<num>" o "error:..." / "help:...".
     """
-    intent = _classify(query or "")
+    q = query or ""
+
+    # Path 1: JSON action embebido -> ejecutar.
+    action_payload = _try_parse_action(q)
+    if action_payload:
+        return await _execute_action(action_payload, actor, odoo, policy)
+
+    # Path 2: verbos de escritura sin JSON -> guiar al modelo.
+    if _WRITE_VERB_RE.search(q):
+        return _help_write_response()
+
+    # Path 3: lectura normal por intent.
+    intent = _classify(q)
     try:
         results = await _route(intent, actor, odoo, policy)
     except PermissionError as exc:
-        # Mantener estructura minima compatible con OpenAI ChatGPT search spec.
-        # ChatGPT parece ignorar respuestas con keys extra. Solo `results`.
         return {"results": [{"id": "error:permission",
                               "title": "Acceso denegado",
                               "text": f"El actor {actor.actor} no tiene permiso "
                                       f"para esta consulta ({intent}). Detalle: {exc}",
                               "url": ""}]}
-    # OpenAI spec estricto: solo `results`. Sin extras como `intent` que pueden
-    # confundir al parser de ChatGPT.
     return {"results": results}
 
 

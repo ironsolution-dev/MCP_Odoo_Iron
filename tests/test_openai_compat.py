@@ -424,3 +424,139 @@ async def test_write_tools_blocked_for_operations_policy_on_crm(actors_yaml, pol
                              area="Operaciones",
                              task_type="ejecucion")
     assert out["id"] == "task:1"
+
+
+# ---------------------------------------------------------------------------
+# Fase 3 — search() con write protocol (JSON action)
+# ---------------------------------------------------------------------------
+
+import json
+
+
+@pytest.mark.asyncio
+async def test_search_executes_json_action_create_task(actors_yaml, policies_yaml, env_actors, token_willy):
+    """search(query con JSON action) ejecuta create_task."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo(
+        search_read_returns={"project.project": [{"id": 1}]},
+        read_returns={"project.task": [{"id": 777, "name": "T", "description": "d"}]},
+        create_returns=777,
+    )
+    actor = reg.verify(token_willy)
+    payload = {
+        "action": "create_task",
+        "project_id": 1,
+        "title": "[APL 2.0][P2][Operaciones][Test] Validar JSON action",
+        "description": _VALID_APL_DESC,
+        "deadline": "2026-05-20",
+        "area": "Operaciones",
+        "task_type": "Test",
+    }
+    out = await search(actor, odoo, pe, json.dumps(payload))
+    assert len(out["results"]) == 1
+    assert out["results"][0]["id"] == "task:777"
+
+
+@pytest.mark.asyncio
+async def test_search_executes_json_action_close_task(actors_yaml, policies_yaml, env_actors, token_willy):
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo(
+        read_returns={"project.task": [{"id": 5, "name": "T", "state": "1_done"}]},
+    )
+    actor = reg.verify(token_willy)
+    payload = {
+        "action": "close_task",
+        "id": "task:5",
+        "evidence": "PR mergeado y validado en staging",
+        "done_stage_id": 7,
+    }
+    out = await search(actor, odoo, pe, json.dumps(payload))
+    assert out["results"][0]["id"] == "task:5"
+    # close_task return tiene closed=True dentro
+    assert out["results"][0].get("closed") or "closed" in str(out)
+
+
+@pytest.mark.asyncio
+async def test_search_help_response_on_write_verb_without_json(actors_yaml, policies_yaml, env_actors, token_willy):
+    """search('crea tarea X') sin JSON devuelve template help."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo()
+    actor = reg.verify(token_willy)
+    out = await search(actor, odoo, pe, "crea una tarea de prueba")
+    assert out["results"][0]["id"] == "help:write_protocol"
+    assert "action" in out["results"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_search_help_includes_all_actions(actors_yaml, policies_yaml, env_actors, token_willy):
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo()
+    actor = reg.verify(token_willy)
+    out = await search(actor, odoo, pe, "cancela tarea 3")
+    text = out["results"][0]["text"]
+    for action in ("create_task", "update_task", "close_task",
+                   "cancel_task", "move_task", "create_project", "create_event"):
+        assert action in text, f"help debe mencionar {action}"
+
+
+@pytest.mark.asyncio
+async def test_search_invalid_json_action_returns_error(actors_yaml, policies_yaml, env_actors, token_willy):
+    """search con JSON pero action invalida devuelve error claro."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo()
+    actor = reg.verify(token_willy)
+    payload = {"action": "drop_database", "table": "everything"}
+    out = await search(actor, odoo, pe, json.dumps(payload))
+    assert out["results"][0]["id"] == "error:unknown_action"
+
+
+@pytest.mark.asyncio
+async def test_search_missing_field_returns_error(actors_yaml, policies_yaml, env_actors, token_willy):
+    """JSON action con campo obligatorio faltante devuelve error claro."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo()
+    actor = reg.verify(token_willy)
+    payload = {"action": "create_task", "title": "incomplete"}  # falta todo
+    out = await search(actor, odoo, pe, json.dumps(payload))
+    assert out["results"][0]["id"] == "error:missing_field"
+    assert "project_id" in out["results"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_search_read_path_still_works(actors_yaml, policies_yaml, env_actors, token_willy):
+    """Sin verbos de escritura ni JSON, search debe seguir leyendo normalmente."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo(search_read_returns={
+        "project.task": [{"id": 1, "name": "T1", "project_id": False}],
+    })
+    actor = reg.verify(token_willy)
+    out = await search(actor, odoo, pe, "lista mis tareas")
+    assert out["results"][0]["id"] == "task:1"
+
+
+def test_try_parse_action_returns_none_without_json():
+    from app.tools.openai_compat import _try_parse_action
+    assert _try_parse_action("lista mis tareas") is None
+    assert _try_parse_action("") is None
+    assert _try_parse_action(None) is None
+
+
+def test_try_parse_action_returns_none_for_json_without_action():
+    from app.tools.openai_compat import _try_parse_action
+    assert _try_parse_action('{"foo": "bar"}') is None
+
+
+def test_try_parse_action_extracts_action_from_embedded_json():
+    from app.tools.openai_compat import _try_parse_action
+    q = 'crea esto: {"action": "create_task", "project_id": 1}'
+    result = _try_parse_action(q)
+    assert result is not None
+    assert result["action"] == "create_task"
+    assert result["project_id"] == 1
