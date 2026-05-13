@@ -1,0 +1,40 @@
+version: 1
+hash_algorithm: sha256
+
+# Plantilla. El archivo real vive en /opt/odoo-mcp-v2/secrets/actors.yaml,
+# fuera de Git, con permisos owner=root group=docker mode=0640.
+# Los token_hash se generan con scripts/generate_mcp_token.py.
+
+actors:
+  willy:
+    enabled: true
+    role: owner
+    display_name: Willy Hierro
+    token_hash: "sha256:REPLACE_WITH_HASH_FROM_GENERATE_SCRIPT"
+    odoo_url_env: ODOO_URL
+    odoo_db_env: ODOO_DB
+    odoo_username_env: ODOO_USERNAME_WILLY
+    odoo_api_key_env: ODOO_API_KEY_WILLY
+    policy: owner_policy
+
+  yuniesky:
+    enabled: true
+    role: operations
+    display_name: Yuniesky
+    token_hash: "sha256:REPLACE_WITH_HASH_FROM_GENERATE_SCRIPT"
+    odoo_url_env: ODOO_URL
+    odoo_db_env: ODOO_DB
+    odoo_username_env: ODOO_USERNAME_YUNIESKY
+    odoo_api_key_env: ODOO_API_KEY_YUNIESKY
+    policy: operations_policy
+
+  anet:
+    enabled: true
+    role: medical_direction
+    display_name: Anet
+    token_hash: "sha256:REPLACE_WITH_HASH_FROM_GENERATE_SCRIPT"
+    odoo_url_env: ODOO_URL
+    odoo_db_env: ODOO_DB
+    odoo_username_env: ODOO_USERNAME_ANET
+    odoo_api_key_env: ODOO_API_KEY_ANET
+    policy: medical_direction_policy

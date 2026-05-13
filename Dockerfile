@@ -1,0 +1,36 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Dependencias del sistema minimas
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar dependencias Python primero (cache layer)
+COPY pyproject.toml ./
+RUN pip install --upgrade pip && pip install \
+    "mcp[cli]>=1.27.0" \
+    "uvicorn>=0.29" \
+    "pyyaml>=6.0"
+
+# Copiar codigo
+COPY app/ ./app/
+COPY scripts/ ./scripts/
+
+# Usuario no-root
+RUN useradd -m -u 1000 mcpuser
+USER mcpuser
+
+EXPOSE 8000
+
+# Healthcheck via TCP — el endpoint /mcp requiere headers MCP especificos
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD python3 -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1',8000)); s.close()"
+
+CMD ["python", "-m", "app.odoo_mcp_remote"]
