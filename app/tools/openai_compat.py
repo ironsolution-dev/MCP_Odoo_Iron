@@ -79,7 +79,7 @@ def _fmt_task(r: dict) -> dict:
         "title": r.get("name") or "(sin titulo)",
         "text": f"Proyecto: {project} | Deadline: {deadline} | "
                 f"{(r.get('description') or '')[:200]}",
-        "url": None,
+        "url": "",
     }
 
 
@@ -88,7 +88,7 @@ def _fmt_project(r: dict) -> dict:
         "id": f"project:{r.get('id')}",
         "title": r.get("name") or "(sin nombre)",
         "text": (r.get("description") or "")[:300],
-        "url": None,
+        "url": "",
     }
 
 
@@ -98,7 +98,7 @@ def _fmt_employee(r: dict) -> dict:
         "title": r.get("name") or "(sin nombre)",
         "text": f"{_name_of(r.get('job_id'))} | {_name_of(r.get('department_id'))} | "
                 f"{r.get('work_email') or ''}",
-        "url": None,
+        "url": "",
     }
 
 
@@ -108,7 +108,7 @@ def _fmt_partner(r: dict) -> dict:
         "title": r.get("display_name") or r.get("name") or "(sin nombre)",
         "text": f"{r.get('email') or ''} | {r.get('phone') or ''} | "
                 f"{r.get('city') or ''}",
-        "url": None,
+        "url": "",
     }
 
 
@@ -118,7 +118,7 @@ def _fmt_lead(r: dict) -> dict:
         "title": r.get("name") or "(sin titulo)",
         "text": f"Etapa: {_name_of(r.get('stage_id')) or 'sin'} | "
                 f"{r.get('email_from') or ''} | {r.get('phone') or ''}",
-        "url": None,
+        "url": "",
     }
 
 
@@ -128,7 +128,7 @@ def _fmt_event(r: dict) -> dict:
         "title": r.get("name") or "(sin titulo)",
         "text": f"{r.get('start') or ''} -> {r.get('stop') or ''} | "
                 f"{r.get('location') or ''}",
-        "url": None,
+        "url": "",
     }
 
 
@@ -195,8 +195,16 @@ async def search(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
     try:
         results = await _route(intent, actor, odoo, policy)
     except PermissionError as exc:
-        return {"results": [], "error": "permission_denied", "detail": str(exc)}
-    return {"results": results, "intent": intent}
+        # Mantener estructura minima compatible con OpenAI ChatGPT search spec.
+        # ChatGPT parece ignorar respuestas con keys extra. Solo `results`.
+        return {"results": [{"id": "error:permission",
+                              "title": "Acceso denegado",
+                              "text": f"El actor {actor.actor} no tiene permiso "
+                                      f"para esta consulta ({intent}). Detalle: {exc}",
+                              "url": ""}]}
+    # OpenAI spec estricto: solo `results`. Sin extras como `intent` que pueden
+    # confundir al parser de ChatGPT.
+    return {"results": results}
 
 
 async def fetch(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
@@ -249,7 +257,7 @@ def _full(rec: dict, kind: str) -> dict:
         "id": f"{kind}:{rec.get('id')}",
         "title": title_map.get(kind) or "",
         "text": rec.get("description") or "",
-        "url": None,
+        "url": "",
         "metadata": rec,
     }
 

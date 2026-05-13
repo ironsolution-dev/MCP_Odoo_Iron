@@ -107,7 +107,6 @@ async def test_search_mis_tareas_calls_my_tasks(actors_yaml, policies_yaml, env_
     })
     actor = reg.verify(token_willy)
     out = await search(actor, odoo, pe, "lista mis tareas")
-    assert out["intent"] == "tasks_my"
     assert len(out["results"]) == 1
     assert out["results"][0]["id"] == "task:7"
     assert out["results"][0]["title"] == "Tarea X"
@@ -122,7 +121,6 @@ async def test_search_projects_returns_project_ids(actors_yaml, policies_yaml, e
     })
     actor = reg.verify(token_willy)
     out = await search(actor, odoo, pe, "lista de proyectos")
-    assert out["intent"] == "projects"
     assert out["results"][0]["id"] == "project:3"
     assert out["results"][0]["title"] == "Mia Salud"
 
@@ -137,7 +135,6 @@ async def test_search_default_returns_overview(actors_yaml, policies_yaml, env_a
     })
     actor = reg.verify(token_willy)
     out = await search(actor, odoo, pe, "que hay")
-    assert out["intent"] == "default"
     ids = [r["id"] for r in out["results"]]
     assert "task:1" in ids and "project:2" in ids
 
@@ -164,8 +161,11 @@ async def test_search_permission_error_returns_structured(actors_yaml, policies_
     odoo = FakeOdoo()
     actor = reg.verify(token_yuniesky)
     out = await search(actor, odoo, pe, "leads de CRM")
-    assert out["error"] == "permission_denied"
-    assert out["results"] == []
+    # Permission denied ahora se devuelve como un item de error dentro de results
+    # (OpenAI spec estricto: solo key `results`). El title indica el problema.
+    assert len(out["results"]) == 1
+    assert "denegado" in out["results"][0]["title"].lower() or \
+           out["results"][0]["id"].startswith("error:")
 
 
 # ---------------------------------------------------------------------------

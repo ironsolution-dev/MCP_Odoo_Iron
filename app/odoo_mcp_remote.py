@@ -148,13 +148,21 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
     try:
         result = await coro
         if _mw and actor:
+            # Para search/fetch que devuelven {"results": [...]} contar el array
+            # interno. Para listas contar largo. Para otros dicts contar 1.
+            if isinstance(result, list):
+                rc = len(result)
+            elif isinstance(result, dict) and isinstance(result.get('results'), list):
+                rc = len(result['results'])
+            else:
+                rc = 1
             _mw.audit.emit(
                 actor=actor.actor,
                 role=actor.role,
                 tool=tool_name,
                 allowed=True,
                 latency_ms=now_ms() - start,
-                result_count=len(result) if isinstance(result, list) else 1,
+                result_count=rc,
             )
         return result
     except Exception as exc:
