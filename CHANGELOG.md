@@ -2,6 +2,69 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.2.2] — 2026-05-13 (adapter ChatGPT chat-mode + normalizer + audit mejorado)
+
+### Added
+
+#### Adapter `search` + `fetch` para ChatGPT chat-mode (commit `954ae9a`)
+- **Diagnostico:** ChatGPT en modo chat estandar solo descubre tools cuyo nombre matchea el patron `search(query)` + `fetch(id)` que OpenAI documenta para connectors MCP. Tools custom (`odoo_my_tasks`, etc.) son **invisibles** para el modelo. Verificado con Yuniesky: el explorador de tools del conector solo devolvio `{"finite": true}` sin nombres invocables.
+- `app/tools/openai_compat.py` (260 LOC): adapter con clasificacion por intent (regex sobre query) y enrutado a las tools nativas. Sin nueva capacidad — solo nueva ruta de entrada.
+- `search(query)` enruta a `odoo_my_tasks`/`odoo_my_tasks_overdue`/`odoo_list_projects`/`odoo_list_employees`/`odoo_list_partners`/`odoo_list_crm_leads`/`odoo_list_calendar_events` segun keywords.
+- `fetch(id)` recibe id compuesto `<kind>:<num>` (task/project/employee/partner/lead) y enruta a la tool `get_*`.
+- Las 30 tools nativas siguen registradas — Claude.ai sigue viendo todo sin filtro.
+- 18 tests nuevos (`tests/test_openai_compat.py`) cubriendo clasificacion, routing, formato, fetch por kind, errores estructurados.
+- Imagen: `odoo-mcp:multiuser-v0.2.1` deployada en VPS.
+
+#### Normalizer de respuestas Odoo (commit `0552f91`)
+- `app/odoo_client.py` `_normalize_record()`: limpia respuestas crudas antes de devolverlas a las tools.
+- Odoo `False` (sentinel de null) → Python `None`.
+- many2one `[id, "Display Name"]` → `{"id": id, "name": "Display Name"}`.
+- HTML en `description`/`note`/`body`/`comment`/`summary` → texto plano, max 800 chars.
+- Aplicado transparente en `search_read()` y `read()`. Sin cambios en las tools.
+- Beneficio: ChatGPT y Claude.ai parsean respuestas sin ambiguedad. Sin esto, ChatGPT recibia 11 tareas pero respondia "no devolvio resultados utilizables" porque su parser se confundia con HTML + tuplas + `false`.
+
+### Fixed
+
+#### Formato OpenAI search spec estricto (commit `092dd4c`)
+- **Diagnostico:** despues de aplicar el adapter, Yuniesky en ChatGPT recibia respuestas (audit log confirmaba 3 invocaciones `search` exitosas) pero el modelo respondia "no veo herramientas". Test directo XML-RPC confirmo que Yuniesky con UID 11 ve 17 empleados, 1510 contactos, 81 eventos, 6 proyectos. El ACL Odoo no era el problema.
+- Causa: ChatGPT chat-mode tiene un parser estricto que ignora respuestas con keys extras o tipos no esperados.
+- `app/tools/openai_compat.py`:
+  - `url: None` → `url: ""` en todos los formatters (spec: string vacio, no null).
+  - Quitar key `intent` del response de search (era informativo nuestro, confundia al parser).
+  - `permission_denied` ahora viene como item dentro de `results` con id `error:permission` en lugar de keys extras a nivel raiz.
+- Resultado: Yuniesky en ChatGPT lista los 17 empleados reales con nombres, cargos, departamentos y emails correctos. Sin alucinacion.
+- Imagen: `odoo-mcp:multiuser-v0.2.2` deployada en VPS.
+
+#### Audit log: count interno para search/fetch (commit `092dd4c`)
+- `_audited()` ahora inspecciona dicts con key `results` y cuenta items del array.
+- Antes: `result_count: 1` siempre para dicts (no se podia diagnosticar si la respuesta era vacia o llena).
+- Ahora: `result_count: 17` (numero real de items en search/fetch).
+- Para `list`s y otros dicts el comportamiento es el anterior.
+
+### QA ejecutado (13 may 2026)
+
+| Actor | Conector | Capacidad | Resultado |
+|---|---|---|---|
+| Willy | Claude.ai | las 30 tools odoo_* | ✅ |
+| Yuniesky | ChatGPT chat-mode | search("mis tareas") | ✅ 5 tareas reales |
+| Yuniesky | ChatGPT chat-mode | search("proyectos") | ✅ 6 proyectos reales |
+| Yuniesky | ChatGPT chat-mode | search("empleados") | ✅ 17 empleados reales con cargos/departamentos/emails |
+| Yuniesky | ChatGPT chat-mode | fetch("task:N") | ✅ detalle completo |
+| Anet | — | pendiente | ⚠️ |
+
+### Limitaciones documentadas (no son bugs)
+
+- **ChatGPT chat-mode no auto-invoca tools custom:** solo `search`/`fetch`. Por eso este adapter existe.
+- **ChatGPT a veces racionaliza array vacio como "no tengo herramienta":** comportamiento del modelo, no del servidor. Mitigado con format estricto.
+- **operations_policy no incluye `odoo_get_employee`/`odoo_get_partner`/`odoo_search_employee`/`odoo_search_partner`:** Yuniesky no puede hacer drill-down a empleados/partners individuales por diseño conservador. Activable con 4 lineas en `config/policies.yaml.example` + redeploy si se requiere.
+
+### Estado de deploy al cierre del 13 may 2026
+
+- VPS GREEN corriendo `odoo-mcp:multiuser-v0.2.2` (commit `092dd4c`).
+- BLUE intocable en `mcp.ovnisystem.com` (Willy lo usa como fallback en ChatGPT).
+- Tests local: 87/87 verde.
+- 3 commits empujados a `feature/v2-multiusuario` hoy: `0552f91`, `954ae9a`, `092dd4c`.
+
 ## [0.2.0] — 2026-05-12 (deploy en produccion + QA parcial Willy/Claude.ai)
 
 ### Fixed

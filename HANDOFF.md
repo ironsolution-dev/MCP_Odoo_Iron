@@ -1,33 +1,45 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 12 may 2026 ~19:00 hrs.
+> Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~21:40 hrs.
 
-## Estado actual (cierre de jornada 12 may 2026 — GREEN en producción, QA parcial)
+## Estado actual (cierre de jornada 13 may 2026 — GREEN + ChatGPT funcional)
 
 ### GREEN operativo en producción
-- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), SSL Let's Encrypt válido hasta ago 2026.
-- BLUE `https://mcp.ovnisystem.com/mcp` — intocable, 9 tools funcionando.
-- 10 commits en `feature/v2-multiusuario` — último: `65deb9d` (docstrings tools).
+- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), imagen `odoo-mcp:multiuser-v0.2.2`.
+- BLUE `https://mcp.ovnisystem.com/mcp` — intocable, 9 tools funcionando. Willy lo conserva como fallback en ChatGPT mientras se valida GREEN con Yuniesky+Anet.
+- 13 commits en `feature/v2-multiusuario`. Últimos 3 (hoy): `092dd4c` (formato OpenAI estricto), `954ae9a` (adapter search/fetch), `0552f91` (normalizer Odoo).
+- Tests local: **87/87 verde** (18 nuevos en `test_openai_compat.py`).
 
-### ⚠️ VPS necesita redeploy
-El último commit (`65deb9d` — docstrings para tool_search) NO está aplicado en VPS.
-Antes de cualquier QA adicional, ejecutar:
-```bash
-ssh root@82.25.90.203
-cd /opt/odoo-mcp-v2/repo && git pull origin feature/v2-multiusuario
-docker build -t odoo-mcp:multiuser-v0.1.0 .
-docker stop odoo-mcp-v2 && docker rm odoo-mcp-v2
-# (docker run — ver runbook sec 3)
-```
+### Hito del día (13 may): ChatGPT chat-mode funciona end-to-end
+
+Antes de hoy, ChatGPT en modo chat estándar **no descubría** las 30 tools custom. Solo invocaba 1-2 esporádicamente y la mayoría de queries devolvían alucinaciones tipo "no tengo acceso a tu Odoo".
+
+Diagnóstico real (con audit logs + XML-RPC directo): ChatGPT chat-mode tiene un patrón fijo de discovery — solo busca tools llamadas `search` y `fetch` (es el contrato de OpenAI para connectors MCP en chat mode, orientado a Deep Research).
+
+Solución: **adapter** (`app/tools/openai_compat.py`, 260 LOC) que expone esos 2 nombres con la firma esperada por OpenAI y enruta internamente al toolset existente. Las 30 tools nativas siguen disponibles para Claude.ai sin cambios.
+
+Adicionalmente, **el formato del response también es estricto**: ChatGPT ignora silenciosamente respuestas con keys extras o `url: null`. Por eso `search()` devuelve sólo `{"results": [{id, title, text, url}]}` con `url: ""` (string vacío). Cualquier key adicional (ej. `intent`) hace que ChatGPT trate la respuesta como vacía.
 
 ### QA ejecutado hasta hoy
-| Actor | Conector | Tool | Resultado |
+| Actor | Conector | Capacidad | Resultado |
 |---|---|---|---|
-| Willy | Claude.ai | `odoo_who_am_i` | ✅ actor=willy, uid=9, owner |
-| Willy | Claude.ai | `odoo_my_tasks` | ✅ 5 tareas reales |
-| Willy | Claude.ai | `odoo_list_projects` | ✅ 6 proyectos reales |
-| Yuniesky | — | pendiente | ❌ |
-| Anet | — | pendiente | ❌ |
+| Willy | Claude.ai | las 30 tools odoo_* directas | ✅ |
+| Yuniesky | ChatGPT chat-mode | search("mis tareas") | ✅ 5 tareas reales |
+| Yuniesky | ChatGPT chat-mode | search("proyectos") | ✅ 6 proyectos reales |
+| Yuniesky | ChatGPT chat-mode | search("empleados") | ✅ 17 empleados (nombres, cargos, dept, email) |
+| Yuniesky | ChatGPT chat-mode | fetch("task:N") | ✅ detalle completo |
+| Yuniesky | ChatGPT (BLUE) | tools BLUE originales | ✅ |
+| Anet | — | pendiente | ⚠️ |
+
+### Cómo activar el conector en ChatGPT chat-mode (operativo, no obvio)
+
+ChatGPT en modo chat estándar requiere **activar explícitamente** el conector POR mensaje:
+1. Chat **nuevo** (no continuar uno donde el modelo ya decidió "no tengo tools").
+2. Modelo: **GPT-5** o **Thinking** (NO "Instant" — ese ignora connectors).
+3. En el composer click en `+` → seleccionar **"Odoo APL 2.0 V2"** → el chip queda **dentro del input** (no como sugerencia abajo).
+4. Recién entonces escribir el prompt y enviar.
+
+Si el chip aparece abajo con `+` al lado, **no está activo** — el modelo responderá que "no veo el conector". Esto es comportamiento de la UI de ChatGPT, no del MCP.
 
 ### Campos inválidos en esta instancia de Odoo (descubiertos en QA)
 | Campo | Modelo | Razón | Fix commit |
