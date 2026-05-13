@@ -12,6 +12,7 @@ Reglas (sec 2.2, 5.4, 7.1 Task Packet):
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import xmlrpc.client
 from dataclasses import dataclass
@@ -22,6 +23,39 @@ from app.token_registry import ActorEntry
 
 
 UID_CACHE_TTL_SECONDS = 300  # 5 minutos
+
+# Limites para no inundar contexto del LLM
+_DESCRIPTION_MAX_CHARS = 800
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_SPACE_RE = re.compile(r"\s+")
+# Campos donde Odoo guarda HTML que el LLM no necesita renderizado
+_HTML_FIELDS = {"description", "note", "body", "comment", "summary"}
+
+
+def _normalize_value(field: str, value: Any) -> Any:
+    """Limpia valores crudos de Odoo para que el LLM los parsee sin ambigüedad.
+
+    - False (Odoo: 'sin valor') -> None
+    - [id, "Display Name"] (Odoo many2one) -> {"id": id, "name": name}
+    - HTML en description/note/body -> texto plano, max 800 chars
+    """
+    if value is False:
+        return None
+    if isinstance(value, list) and len(value) == 2 \
+            and isinstance(value[0], int) and isinstance(value[1], str):
+        # Odoo many2one tuple
+        return {"id": value[0], "name": value[1]}
+    if field in _HTML_FIELDS and isinstance(value, str) and "<" in value:
+        text = _HTML_TAG_RE.sub(" ", value)
+        text = _HTML_SPACE_RE.sub(" ", text).strip()
+        if len(text) > _DESCRIPTION_MAX_CHARS:
+            text = text[: _DESCRIPTION_MAX_CHARS - 1] + "…"
+        return text
+    return value
+
+
+def _normalize_record(record: dict) -> dict:
+    return {k: _normalize_value(k, v) for k, v in record.items()}
 
 
 class OdooAuthError(RuntimeError):
@@ -116,9 +150,10 @@ class OdooClient:
         kwargs: dict[str, Any] = {"fields": fields, "limit": limit, "offset": offset}
         if order:
             kwargs["order"] = order
-        return await asyncio.to_thread(
+        raw = await asyncio.to_thread(
             self._execute_kw_sync, creds, uid, model, "search_read", [domain], kwargs
         )
+        return [_normalize_record(r) for r in raw]
 
     async def read(
         self,
@@ -129,9 +164,10 @@ class OdooClient:
     ) -> list[dict]:
         uid = await self.authenticate(actor)
         creds = self._get_creds(actor)
-        return await asyncio.to_thread(
+        raw = await asyncio.to_thread(
             self._execute_kw_sync, creds, uid, model, "read", [ids], {"fields": fields}
         )
+        return [_normalize_record(r) for r in raw]
 
     async def create(
         self,
