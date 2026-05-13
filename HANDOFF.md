@@ -1,23 +1,18 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 12 may 2026 ~19:00 hrs.
+> Documento operativo para retomar el ticket. **Última actualización:** 12 may 2026 ~20:30 hrs.
 
-## Estado actual (cierre de jornada 12 may 2026 — GREEN en producción, QA parcial)
+## Estado actual (cierre definitivo de jornada 12 may 2026)
 
-### GREEN operativo en producción
-- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), SSL Let's Encrypt válido hasta ago 2026.
+### ✅ Todo aplicado en VPS
+- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), commit `f7639fe` aplicado.
+- SSL Let's Encrypt válido hasta ago 2026.
 - BLUE `https://mcp.ovnisystem.com/mcp` — intocable, 9 tools funcionando.
-- 10 commits en `feature/v2-multiusuario` — último: `65deb9d` (docstrings tools).
+- **11 commits** en `feature/v2-multiusuario`, todos en VPS.
+- **PR #1 creado** en GitHub: `release/v0.2.0 → main` (NO mergear hasta QA Yuniesky+Anet + Result Packet).
 
-### ⚠️ VPS necesita redeploy
-El último commit (`65deb9d` — docstrings para tool_search) NO está aplicado en VPS.
-Antes de cualquier QA adicional, ejecutar:
-```bash
-ssh root@82.25.90.203
-cd /opt/odoo-mcp-v2/repo && git pull origin feature/v2-multiusuario
-docker build -t odoo-mcp:multiuser-v0.1.0 .
-docker stop odoo-mcp-v2 && docker rm odoo-mcp-v2
-# (docker run — ver runbook sec 3)
+### ✅ VPS al día — NO necesita redeploy al arrancar mañana
+El VPS tiene commit `f7639fe` (CHANGELOG + HANDOFF). Próxima sesión arranca directo con QA.
 ```
 
 ### QA ejecutado hasta hoy
@@ -39,7 +34,24 @@ docker stop odoo-mcp-v2 && docker rm odoo-mcp-v2
 - **Claude.ai:** token en path `/mcp/<token>`. UI no tiene campo Bearer. Middleware ASGI reescribe path → `/mcp`. ✅ Funcionando.
 - **ChatGPT:** `X-Api-Key` header. GET sin SSE → 200 discovery. Fix aplicado. Pendiente QA completo.
 
-### Score ticket: 12/13 criterios técnicos ✅. Pendiente QA manual Yuniesky+Anet y Result Packet.
+### Score ticket: 11.5/13 — Técnico completo. Falta QA Yuniesky+Anet y Result Packet.
+
+### Para mañana — orden exacto (estimado 1h)
+| # | Acción | Quién | Tiempo |
+|---|---|---|---|
+| 1 | Verificar `tail -5 /opt/odoo-mcp-v2/logs/audit.jsonl` tiene entries `allowed:true` | Willy en VPS | 2 min |
+| 2 | Yuniesky conecta Claude.ai con URL `https://mcp-v2.ovnisystem.com/mcp/mcp_fyWMoN8drs06p3k7JV4QsuLU30n1HSuOlab_KalIcP4` | Yuniesky | 10 min |
+| 3 | Yuniesky ejecuta `odoo_who_am_i` + `odoo_my_tasks` | Yuniesky | 5 min |
+| 4 | Anet conecta Claude.ai con URL `https://mcp-v2.ovnisystem.com/mcp/mcp_NoEJYKVwozVWGzEOPfh-grSmz-Kmhf9FuG4kfb-F6OI` | Anet | 10 min |
+| 5 | Anet ejecuta `odoo_who_am_i` | Anet | 2 min |
+| 6 | Ejecutar `odoo_validate_apl_stages` → llenar `docs/APL_STAGES.md` | Willy/JuliO | 5 min |
+| 7 | Llenar y firmar `docs/result-packet-template.md` | Willy | 20 min |
+| 8 | Aprobar y mergear PR #1 en GitHub | Willy | 2 min |
+
+### PR en GitHub
+- **URL:** `https://github.com/ironsolution-dev/MCP_Odoo_Iron/pull/1`
+- **Branch:** `release/v0.2.0 → main`
+- **Estado:** Abierto. NO mergear hasta completar pasos 1-7 arriba.
 
 ---
 

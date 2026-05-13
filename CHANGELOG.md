@@ -41,14 +41,19 @@ Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 | `odoo_my_tasks` | ✅ 5 tareas personales reales |
 | `odoo_list_projects` | ✅ 6 proyectos reales con tareas anidadas |
 
-### Pendiente para cierre formal
+### Ejecutado al final de jornada (post-QA parcial)
 
-- Redeploy VPS con último commit (`65deb9d`) para docstrings y tool_search fix.
-- QA Yuniesky y Anet (pendiente conectores individuales).
-- Audit success verificado en VPS live.
-- `docs/APL_STAGES.md` con etapas reales.
-- Result Packet firmado por Willy + Daniel.
-- PR `feature/v2-multiusuario` → `main`.
+- ✅ VPS redeployado con commit `f7639fe` — todos los fixes aplicados en producción.
+- ✅ PR #1 creado en GitHub: `release/v0.2.0 → main` (pendiente aprobación post-QA completo).
+- ✅ QA Willy/Claude.ai: `odoo_who_am_i`, `odoo_my_tasks`, `odoo_list_projects` verificados con datos reales de Odoo.
+
+### Pendiente para cierre formal (mañana ~1h)
+
+- ⏳ Verificar `audit.jsonl` tiene entries `allowed:true` post-redeploy.
+- ⏳ QA Yuniesky y Anet (conectores individuales Claude.ai).
+- ⏳ `docs/APL_STAGES.md` con etapas reales (via `odoo_validate_apl_stages`).
+- ⏳ Result Packet firmado por Willy.
+- ⏳ Merge PR #1 → main.
 
 ---
 
