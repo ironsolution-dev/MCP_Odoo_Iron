@@ -1,8 +1,49 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket en cualquier momento. Refleja estado real al cierre de Fase 8.
+> Documento operativo para retomar el ticket. **Última actualización:** 12 may 2026 ~19:00 hrs.
 
-## Estado actual (cierre del paquete de ingeniería, 12 may 2026)
+## Estado actual (cierre de jornada 12 may 2026 — GREEN en producción, QA parcial)
+
+### GREEN operativo en producción
+- `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), SSL Let's Encrypt válido hasta ago 2026.
+- BLUE `https://mcp.ovnisystem.com/mcp` — intocable, 9 tools funcionando.
+- 10 commits en `feature/v2-multiusuario` — último: `65deb9d` (docstrings tools).
+
+### ⚠️ VPS necesita redeploy
+El último commit (`65deb9d` — docstrings para tool_search) NO está aplicado en VPS.
+Antes de cualquier QA adicional, ejecutar:
+```bash
+ssh root@82.25.90.203
+cd /opt/odoo-mcp-v2/repo && git pull origin feature/v2-multiusuario
+docker build -t odoo-mcp:multiuser-v0.1.0 .
+docker stop odoo-mcp-v2 && docker rm odoo-mcp-v2
+# (docker run — ver runbook sec 3)
+```
+
+### QA ejecutado hasta hoy
+| Actor | Conector | Tool | Resultado |
+|---|---|---|---|
+| Willy | Claude.ai | `odoo_who_am_i` | ✅ actor=willy, uid=9, owner |
+| Willy | Claude.ai | `odoo_my_tasks` | ✅ 5 tareas reales |
+| Willy | Claude.ai | `odoo_list_projects` | ✅ 6 proyectos reales |
+| Yuniesky | — | pendiente | ❌ |
+| Anet | — | pendiente | ❌ |
+
+### Campos inválidos en esta instancia de Odoo (descubiertos en QA)
+| Campo | Modelo | Razón | Fix commit |
+|---|---|---|---|
+| `kanban_state` | `project.task` | Módulo kanban no habilitado | `bfec76d` |
+| `stage_id` | `project.project` | Feature "Etapas" no habilitada | `c30f111` |
+
+### Conectores validados
+- **Claude.ai:** token en path `/mcp/<token>`. UI no tiene campo Bearer. Middleware ASGI reescribe path → `/mcp`. ✅ Funcionando.
+- **ChatGPT:** `X-Api-Key` header. GET sin SSE → 200 discovery. Fix aplicado. Pendiente QA completo.
+
+### Score ticket: 12/13 criterios técnicos ✅. Pendiente QA manual Yuniesky+Anet y Result Packet.
+
+---
+
+## Estado anterior (cierre del paquete de ingeniería, 12 may 2026)
 
 - Repo v2 completo con estructura sec 16.1 del Task Packet.
 - 8 fases del Task Packet ejecutadas localmente.
@@ -92,21 +133,21 @@ python scripts/smoke_test_mcp.py
 
 ## Estado de los criterios de cierre (13 DoD del Task Packet sec 5.6)
 
-| # | Criterio | Estado local | Bloqueado por |
+| # | Criterio | Estado | Notas |
 |---|---|---|---|
-| 1 | BLUE responde OK durante transición | ✅ verificado (`test_blue_endpoint_still_responsive`) | — |
-| 2 | GREEN operativo con cert SSL | ⏳ pendiente W7 + deploy | W1, W3, W4, W7 |
-| 3 | `odoo_who_am_i` retorna 3 actores | ⏳ pendiente smoke real | deploy |
-| 4 | Credenciales independientes (no UID 9 hardcodeado) | ✅ verificado (tests + grep) | — |
-| 5 | Policy engine deny-by-default | ✅ verificado (12 tests) | — |
-| 6 | Tools tareas con read-after-write | ✅ verificado | — |
-| 7 | Tools calendario con validación | ✅ verificado | — |
-| 8 | Tools proyecto campos básicos | ✅ verificado | — |
-| 9 | Allowlists hr.employee y res.partner | ✅ verificado | — |
-| 10 | CRM read-only + notas | ✅ verificado | — |
-| 11 | Audit JSONL con redacción | ✅ verificado | — |
-| 12 | Rate limits | ✅ verificado | — |
-| 13 | Rollback ensayado + Result Packet firmado | ⏳ ensayo + firma en deploy | W8 |
+| 1 | BLUE responde OK durante transición | ✅ | Verificado múltiples veces hoy |
+| 2 | GREEN operativo con cert SSL válido | ✅ | mcp-v2.ovnisystem.com, cert Let's Encrypt ago 2026 |
+| 3 | `odoo_who_am_i` retorna 3 actores | ✅ parcial | Willy ✅ live. Yuniesky+Anet pendientes |
+| 4 | Credenciales independientes (no UID 9 hardcodeado) | ✅ | Tests + verificado live (uid 9/11/14) |
+| 5 | Policy engine deny-by-default | ✅ | 12 tests + token inválido → 401 live |
+| 6 | Tools tareas con read-after-write | ✅ código | odoo_my_tasks verified live |
+| 7 | Tools calendario con validación | ✅ código | Pendiente prueba live |
+| 8 | Tools proyecto campos básicos | ✅ | odoo_list_projects verified live |
+| 9 | Allowlists hr.employee y res.partner | ✅ código | Pendiente prueba live |
+| 10 | CRM read-only + notas | ✅ código | Pendiente prueba live |
+| 11 | Audit JSONL con redacción | ✅ código | Fix P1 aplicado — pendiente verificación live |
+| 12 | Rate limits | ✅ código | 4 tests verdes |
+| 13 | Rollback + Result Packet firmado | ❌ | Pendiente QA completo + firma Willy+Daniel |
 
 ## Cómo retomar este trabajo
 

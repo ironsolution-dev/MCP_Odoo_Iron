@@ -2,6 +2,56 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.2.0] — 2026-05-12 (deploy en produccion + QA parcial Willy/Claude.ai)
+
+### Fixed
+
+#### Compatibilidad conectores (commits post-deploy)
+- **P0 Claude.ai (path token):** `BearerMiddleware` convertido de `BaseHTTPMiddleware` a middleware ASGI puro. Permite reescribir `scope['path']` de `/mcp/<token>` → `/mcp` antes de FastMCP. Sin este fix, Claude.ai obtenía HTTP 404 con el token en el path. (commit `0246596`)
+- **P0 ChatGPT (X-Api-Key):** `auth_middleware.extract_token()` acepta header `X-Api-Key` como segundo canal de autenticación (prioridad: Bearer > X-Api-Key > path). GET `/mcp` sin `Accept: text/event-stream` retorna 200 JSON discovery en vez de 406. (commit `d0a2bfb`)
+- **P1 audit success:** `_audited()` no registraba success porque `_actor.get()` retornaba None dentro del task group de anyio creado por `call_next`. Fix: actor capturado explícitamente en scope de cada `@mcp.tool()` y pasado como parámetro. (commit `63c0c3e`)
+- **mcp 1.27.0:** Dockerfile usaba `fastmcp` (terceros). VPS tenía `mcp==1.27.0` (SDK oficial). Entry point reescrito con `mcp.server.fastmcp.FastMCP` + `streamable_http_app()` + ContextVar. Healthcheck cambiado de `curl /health` a TCP socket Python. (commit `387d349`)
+- **kanban_state eliminado de `TASK_SAFE_FIELDS`:** Campo no disponible en Odoo 19 Community sin módulo kanban. Causaba `ValueError: Invalid field` en `project.task`. (commit `bfec76d`)
+- **stage_id eliminado de `PROJECT_SAFE_FIELDS`:** Feature "Etapas de proyecto" no habilitada en esta instancia. Causaba error 403 en `project.project`. El `stage_id` de `project.task` en `odoo_project_tasks` NO se modifica (campo válido). (commit `c30f111`)
+
+### Added
+
+#### Deploy VPS Infinity (12 may 2026)
+- GREEN `odoo-mcp-v2` desplegado en `https://mcp-v2.ovnisystem.com/mcp`.
+- SSL Let's Encrypt emitido y válido hasta ago 2026.
+- Snapshot BLUE en `/opt/odoo-mcp-v2/backups/20260512_192156/`.
+- Secrets en `/opt/odoo-mcp-v2/secrets/` (actors.yaml, policies.yaml, .env.v2).
+- Audit log en `/opt/odoo-mcp-v2/logs/audit.jsonl`.
+
+#### Docstrings en 30 tools
+- Todas las funciones `@mcp.tool()` ahora tienen docstring en español.
+- Corrige fallo de `tool_search` semántico de Claude.ai que no encontraba tools sin descripción. (commit `65deb9d`)
+
+#### Connectors auth spike documentado
+- `docs/baseline/connectors_auth_spike.md` completado con resultados reales.
+- Claude.ai: token en path `/mcp/<token>` (no soporte Bearer en UI). Middleware ASGI reescribe path.
+- ChatGPT: `X-Api-Key` header en modo API Key. GET sin SSE → 200 JSON discovery.
+- ADR-007 y ADR-010 validados en producción.
+
+### QA ejecutado (Willy / Claude.ai) — 12 may 2026
+
+| Tool | Resultado |
+|---|---|
+| `odoo_who_am_i` | ✅ actor=willy, uid=9, role=owner, policy=owner_policy |
+| `odoo_my_tasks` | ✅ 5 tareas personales reales |
+| `odoo_list_projects` | ✅ 6 proyectos reales con tareas anidadas |
+
+### Pendiente para cierre formal
+
+- Redeploy VPS con último commit (`65deb9d`) para docstrings y tool_search fix.
+- QA Yuniesky y Anet (pendiente conectores individuales).
+- Audit success verificado en VPS live.
+- `docs/APL_STAGES.md` con etapas reales.
+- Result Packet firmado por Willy + Daniel.
+- PR `feature/v2-multiusuario` → `main`.
+
+---
+
 ## [0.1.0] — 2026-05-12 (paquete de ingenieria listo para deploy)
 
 ### Added
