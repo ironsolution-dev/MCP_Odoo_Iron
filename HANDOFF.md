@@ -1,8 +1,60 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~21:40 hrs.
+> Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~23:30 UTC.
 
-## Estado actual (cierre extendido 13 may 2026 ~22:20 UTC — Yuniesky escribiendo en Odoo desde ChatGPT)
+## Estado actual (cierre Fase 4 — 13 may 2026 ~23:25 UTC — Yuniesky escribiendo en Odoo con lenguaje natural puro)
+
+### Hito final del día: parser NL server-side elimina dependencia del modelo
+
+Tras desplegar v0.3.2 con instructions directivas, audit confirmó que ChatGPT
+chat-mode recibía el `_help_write_response()` pero NO reintentaba con JSON —
+devolvía markdown al usuario diciendo "no puedo escribir". Patron repetido
+`latency_ms=0, result_count=1` (firma del help) sin entries de creación.
+
+Solución: **Fase 4 — parser de lenguaje natural en `app/tools/openai_nl_parser.py`**
+(~270 LOC). Cuando llega un query con verbos de escritura SIN JSON, el servidor
+extrae intent + campos via regex+heurísticas, resuelve project name→id via
+`odoo.search_read`, auto-rellena APL 2.0 (título envuelto + 8 campos descripción)
+y ejecuta directo.
+
+Verificación en producción 23:20 UTC con prompt anti-alucinación:
+Yuniesky en ChatGPT envió 7 frases naturales → servidor creó/modificó/cerró
+5 entidades reales (task:135, task:136, project:8) sin tocar JSON.
+
+### Estado producción v0.3.3
+- `https://mcp-v2.ovnisystem.com/mcp` — Up healthy, imagen `odoo-mcp:multiuser-v0.3.3`.
+- BLUE `https://mcp.ovnisystem.com/mcp` — intocable.
+- 17 commits en `feature/v2-multiusuario`. Último: `0a7a967` (Fase 4 NL parser).
+- Tests local: **135/135 verde** (110 previos + 20 nuevos parser + 5 reparados).
+
+### Verificación final Yuniesky 7/7 OK (23:20 UTC)
+
+| Paso | Frase ChatGPT | Resultado |
+|---|---|---|
+| 1 | `quien soy` | identity:yuniesky |
+| 2 | `proyectos` | 7 proyectos visibles |
+| 3 | `crea tarea 'test conector v0.3.3' en proyecto Gerente de Operaciones` | task:135 en project_id=3 |
+| 4 | `crea pendiente 'Validar v0.3.3 desde QA' deadline: 2026-05-20` | task:136 personal |
+| 5 | `actualiza tarea 135 prioridad alta` | priority=2 |
+| 6 | `cierra tarea 136 con evidencia: parser NL post-deploy validado` | state=1_done |
+| 7 | `crea proyecto 'QA NL v0.3.3'` | project:8 |
+
+### Tres lecciones nuevas del día
+
+1. **ChatGPT chat-mode cachea narrativa por chat**. Si en un turno el modelo
+   concluyó "no puedo escribir", se queda con esa narrativa el resto del chat
+   aunque el servidor exponga la capacidad. Mitigación: chat NUEVO + prompt
+   anti-alucinación con REGLAS INVIOLABLES listadas al principio.
+2. **Help response no es suficiente — la inteligencia debe vivir server-side**.
+   Antes de Fase 4, el servidor devolvía template JSON al modelo y le pedía
+   reintento. El modelo se rendía. Solución: que el servidor parsee NL directo.
+3. **GPT-5 puede alucinar mensajes técnicos** como "Resource not found: search"
+   cuando el chip no está activo. No es un error real del MCP. Verificar
+   siempre en audit.jsonl antes de creer cualquier reporte de error.
+
+---
+
+## Estado anterior (cierre extendido 13 may 2026 ~22:20 UTC — Yuniesky escribiendo en Odoo desde ChatGPT)
 
 ### GREEN operativo en producción con paridad total Yuniesky/Willy
 - `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), imagen `odoo-mcp:multiuser-v0.3.1`.
