@@ -92,6 +92,43 @@ async def test_close_task_alt_verb(actor_stub, odoo_stub, policy_stub):
 
 
 @pytest.mark.asyncio
+async def test_close_task_evidence_with_dots_preserved(actor_stub, odoo_stub, policy_stub):
+    """Bug fix v0.3.5: evidencia con puntos internos (versiones, URLs, etc.)
+    no debe truncarse en el primer punto literal.
+
+    Verificado en QA 13-may-2026: evidencia con "v0.3.4" se cortaba a
+    "Auditoria final v0" (18 chars), fallando validacion de minimo 20 chars.
+    """
+    p = await nl.try_parse(
+        "cierra tarea 150 con evidencia: Auditoria final v0.3.4 ejecutada "
+        "con exito. Conector ChatGPT Willy operativo end-to-end. Partners "
+        "fix verificado. Cierre 13-may-2026.",
+        actor_stub, odoo_stub, policy_stub,
+    )
+    assert p is not None, "parser debe extraer evidencia con puntos internos"
+    assert p["action"] == "close_task"
+    assert p["id"] == "task:150"
+    # La evidencia debe contener al menos 'v0.3.4' (que tiene un punto)
+    assert "v0.3.4" in p["evidence"], f"evidencia truncada: {p['evidence']!r}"
+    assert len(p["evidence"]) >= 50, (
+        f"evidencia demasiado corta ({len(p['evidence'])} chars): {p['evidence']!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_reason_with_dots_preserved(actor_stub, odoo_stub, policy_stub):
+    """Mismo bug fix v0.3.5 aplicado a motivo de cancelacion."""
+    p = await nl.try_parse(
+        "cancela tarea 99 motivo: cliente cambio de plan v2.0 y ya no aplica al alcance original",
+        actor_stub, odoo_stub, policy_stub,
+    )
+    assert p is not None
+    assert p["action"] == "cancel_task"
+    assert "v2.0" in p["reason"]
+    assert "alcance original" in p["reason"]
+
+
+@pytest.mark.asyncio
 async def test_close_task_missing_evidence_returns_none(actor_stub, odoo_stub, policy_stub):
     p = await nl.try_parse("cierra tarea 128", actor_stub, odoo_stub, policy_stub)
     assert p is None  # ambiguo -> help

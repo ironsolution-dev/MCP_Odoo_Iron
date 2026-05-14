@@ -54,14 +54,21 @@ _PROJECT_NAME_RE = re.compile(
 _STAGE_REF_RE = re.compile(r"\b(?:etapa|stage)\s+(?:id\s*=?\s*)?(\d+)\b", re.IGNORECASE)
 
 # evidencia: ... | evidencia ...
+# Bug fix v0.3.5: el lookahead NO debe terminar en `\.` literal porque
+# rompe con evidencias que contienen puntos internos (v0.3.4, URLs,
+# abreviaciones tipo "Dr.", fechas, etc.). Verificado QA 13-may-2026:
+# evidencia "Auditoria final v0.3.4 ejecutada..." quedaba cortada a
+# "Auditoria final v0" (18 chars < 20 minimo del validador).
+# Ahora terminamos solo en keywords explícitos o fin de línea/string.
 _EVIDENCE_RE = re.compile(
-    r"\bevidencia[:\s]+(.{10,500}?)(?=\s*(?:done_stage|stage_id|\.|$|\n))",
+    r"\bevidencia[:\s]+(.{10,500}?)(?=\s*(?:done_stage|stage_id|$|\n))",
     re.IGNORECASE | re.DOTALL,
 )
 
 # motivo: ... | razon: ...
+# Bug fix v0.3.5: mismo motivo que evidencia — no cortar en punto literal.
 _REASON_RE = re.compile(
-    r"\b(?:motivo|raz[oó]n)[:\s]+(.{3,500}?)(?=\s*(?:cancelled|stage_id|\.|$|\n))",
+    r"\b(?:motivo|raz[oó]n)[:\s]+(.{3,500}?)(?=\s*(?:cancelled|stage_id|$|\n))",
     re.IGNORECASE | re.DOTALL,
 )
 

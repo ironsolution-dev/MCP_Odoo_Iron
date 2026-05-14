@@ -2,6 +2,53 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.3.5] — 2026-05-14 (Fix parser NL: evidencia/motivo con puntos internos)
+
+### Bug identificado durante auditoría final 13-may-2026 ~01:39 UTC
+
+Willy en ChatGPT ejecutó auditoría final post-v0.3.4. Paso 7 (cierre con
+evidencia) falló con error del servidor:
+`ValueError: evidencia demasiado corta (18 chars). Minimo 20 chars.`
+
+La evidencia enviada tenía ~130 chars (`"Auditoria final v0.3.4 ejecutada
+con exito. Conector ChatGPT Willy operativo end-to-end. Partners fix
+verificado. Cierre 13-may-2026."`), pero el parser NL la cortó a 18 chars
+(`"Auditoria final v0"`) — exactamente hasta el primer punto literal en
+`v0.3.4`.
+
+### Causa raíz
+
+El regex `_EVIDENCE_RE` (y `_REASON_RE`) en `app/tools/openai_nl_parser.py`
+usaba lookahead `(?=...|\.|...)` que terminaba la captura en cualquier
+punto literal. Esto rompía con evidencias que contienen:
+- Números de versión (`v0.3.4`, `v1.2`)
+- URLs (`mcp-v2.ovnisystem.com`)
+- Abreviaciones (`Dr.`, `Sr.`, `etc.`)
+- Fechas con punto separador
+
+### Changed
+
+- `app/tools/openai_nl_parser.py`:
+  - `_EVIDENCE_RE`: lookahead reducido a `(?=\s*(?:done_stage|stage_id|$|\n))`.
+    Ya no termina en punto literal. Captura completa hasta keyword o fin.
+  - `_REASON_RE`: mismo fix aplicado por simetría.
+  - Comentario explicativo del bug fix.
+
+### Added
+
+- `tests/test_openai_nl_parser.py`:
+  - `test_close_task_evidence_with_dots_preserved`: regression test con
+    la frase exacta que falló en producción (incluye `v0.3.4`).
+  - `test_cancel_task_reason_with_dots_preserved`: simétrico para motivo.
+
+### Verificación post-fix
+
+- Tests local: **137/137 verde** (135 previos + 2 regression nuevos).
+- En producción post-deploy: `cierra tarea N con evidencia: texto con
+  v0.3.4 puntos.` debe ejecutar OK.
+
+---
+
 ## [0.3.4] — 2026-05-13 (Fix bug servidor: campo 'mobile' inválido en res.partner)
 
 ### Bug identificado durante QA tri-canal 13-may-2026
