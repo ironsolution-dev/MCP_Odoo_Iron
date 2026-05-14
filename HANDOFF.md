@@ -1,25 +1,52 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~23:55 UTC (cierre de jornada).
+> Documento operativo para retomar el ticket. **Última actualización:** 14 may 2026 ~02:00 UTC (cierre real de jornada).
 
-## Pendiente prioritario al retomar (14-may)
+## CIERRE 14-MAY 02:00 UTC — TRI-CANAL OPERATIVO 100%
 
-**Diagnosticar bucle "Activa el chip" en ChatGPT de Willy.** Síntoma: tras configurar Custom Instructions con regla preemptiva sobre el conector "Odoo APL 2.0 V2", el modelo responde la línea de activación aunque el chip parece estar activo. Yuniesky funcionando paralelo OK desde su ChatGPT.
+### Producción final
+- Imagen: `odoo-mcp:multiuser-v0.3.5` (parser NL + partners fix + evidencia con puntos)
+- BLUE intacto, GREEN healthy
+- Tests local: **137/137 verde**
 
-Test aislado a ejecutar primero:
-1. Eliminar bloque MCP de Custom Instructions de Willy (dejar solo bloque KAEL).
-2. Chat nuevo ChatGPT + chip activo.
-3. `tail -f /opt/odoo-mcp-v2/logs/audit.jsonl | grep willy` en VPS.
-4. Test: `quien soy`.
-5. Si audit aparece entry willy + respuesta OK → era Custom Instructions. Reescribir REACTIVA.
-6. Si NO aparece → problema UI/cache ChatGPT.
-7. Si aparece con error_class → bug v2 específico Willy.
+### Validación tri-canal completada hoy
 
-## Tickets Odoo cerrados hoy
+| Canal | Score | Notas |
+|---|---|---|
+| **Yuniesky ChatGPT** | ✅ 10/10 | NL puro funcionando. owner_policy efectiva |
+| **Willy Claude.ai** | ✅ 10/10 | 30 tools nativas. Partners fix verificado |
+| **Willy ChatGPT** | ✅ 7/8 inicial → 8/8 con v0.3.5 | Reset conector + eliminado BLUE legacy |
+
+### Bugs resueltos durante el día
+
+1. **v0.3.4** — `mobile` field inválido en `res.partner` (Odoo 17/18/19 Community). Removido de PARTNER_SAFE_FIELDS, policies.yaml.example y tests. Verificado en producción: `partners=20` post-deploy (antes 0).
+2. **v0.3.5** — Parser NL `_EVIDENCE_RE`/`_REASON_RE` truncaba en primer punto literal (rompía con `v0.3.4`, URLs, abreviaciones). Lookahead corregido. 2 regression tests nuevos.
+
+### Aprendizaje crítico del día — Willy ChatGPT bucle "Activa el chip"
+
+El bucle "Activa el chip" tenía dos causas combinadas:
+1. **Custom Instructions con regla preemptiva** demasiado estricta. El modelo bloqueaba ANTES de intentar invocar la tool.
+2. **Conector BLUE legacy presente** en la cuenta ChatGPT de Willy junto con V2. ChatGPT podía estar resolviendo el chip al conector incorrecto o cacheando estados conflictivos.
+
+Solución aplicada:
+1. Eliminado el conector BLUE de la cuenta ChatGPT de Willy.
+2. Reset completo del conector V2 (desconectar + reconectar con token nuevo).
+3. Cerrar todos los chats viejos (cache de discovery por-chat).
+4. Custom Instructions ajustadas a regla REACTIVA (intentar primero, bloquear solo si runtime falla).
+
+### Tickets Odoo afectados hoy
 
 - task:113 ✅ Cerrado formal (Ticket técnico master MCP v2)
 - task:115 ✅ Cerrado formal (Seguimiento cierre formal)
-- task:142 ⏳ Sucesor administrativo activo con prioridad alta — los 5 admin pendientes
+- task:135, 136, 137, 142, 146-150 ⏳ Tareas operativas/QA generadas durante el día
+- task:142 ⏳ Sucesor administrativo activo con prioridad alta
+
+### Pendientes administrativos en task:142 (no técnicos, retomables sin urgencia)
+1. QA Anet completo
+2. Llenar `docs/APL_STAGES.md`
+3. Llenar `docs/actor_odoo_permissions.md`
+4. Firmar Result Packet
+5. Merge PR #1 → main
 
 ## Estado actual (cierre Fase 4 — 13 may 2026 ~23:25 UTC — Yuniesky escribiendo en Odoo con lenguaje natural puro)
 
