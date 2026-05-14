@@ -2,6 +2,32 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## Cierre real jornada 13-may-2026 → 14-may 03:00 UTC
+
+Bitácora narrativa completa: `docs/bitacora-2026-05-13.md`.
+
+Resumen ejecutivo del día más denso del proyecto v2:
+
+- **Score DoD Ticket 113**: 11.5/13 → 13/13 técnico
+- **Canales operativos**: 1 → 3 (Yuniesky ChatGPT + Willy Claude.ai + Willy ChatGPT)
+- **Imagen producción**: v0.1.0 → v0.3.5
+- **Tests verde**: 110 → 137
+- **Commits feature/v2-multiusuario hoy**: 10
+- **Bugs servidor resueltos**: 2 (partners + parser NL)
+- **Tareas creadas en Odoo**: task:128 a task:150
+- **Tickets cerrados formal**: 113, 115 (sucesor admin: 143)
+
+Lecciones críticas preservadas en bitácora:
+1. Inteligencia debe vivir server-side (parser NL) — el modelo no es confiable para protocolos JSON.
+2. Reglas preemptivas en Custom Instructions causan bucles en ChatGPT.
+3. Frases trigger memorizadas son persistentes — purga manual necesaria.
+4. "Auto" en selector de modelo rompe MCP connectors — usar GPT-5/Thinking explícito.
+5. Discovery de tools se cachea por-chat en ChatGPT.
+6. Audit log es la única fuente de verdad sobre invocaciones reales.
+7. Conectores BLUE + V2 simultáneos en mismo cliente generan conflicto.
+
+---
+
 ## [0.3.5] — 2026-05-14 (Fix parser NL: evidencia/motivo con puntos internos)
 
 ### Bug identificado durante auditoría final 13-may-2026 ~01:39 UTC

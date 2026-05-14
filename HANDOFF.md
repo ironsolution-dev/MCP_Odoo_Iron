@@ -1,6 +1,36 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 14 may 2026 ~02:00 UTC (cierre real de jornada).
+> Documento operativo para retomar el ticket. **Última actualización:** 14 may 2026 ~03:00 UTC (cierre absoluto del día).
+
+## CIERRE ABSOLUTO 14-MAY 03:00 UTC — TRI-CANAL 100% + WILLY CHATGPT BUCLE DERROTADO
+
+### Hito final del día
+ChatGPT de Willy operativo end-to-end tras purgar Custom Instructions preemptivas + limpiar Memoria + eliminar conector BLUE legacy. Willy invocó "dame mis proyectos y tareas" y ChatGPT devolvió tabla real con tickets reales + lectura ejecutiva KAEL.
+
+### Bitácora detallada
+Ver `docs/bitacora-2026-05-13.md` — narrativa cronológica completa del día, 7 fases, todos los hitos, todas las lecciones críticas preservadas para sesiones futuras.
+
+### Versiones servidor del día
+- v0.3.1: Yuniesky owner + 8 write tools + JSON action protocol
+- v0.3.2: directive instructions (intermedio)
+- v0.3.3: Fase 4 parser NL server-side
+- v0.3.4: fix bug servidor `mobile` campo inválido en res.partner
+- v0.3.5: fix bug parser NL evidencia/motivo con puntos internos
+- **En producción**: `odoo-mcp:multiuser-v0.3.5`
+
+### Pendientes administrativos en task:143 (no urgentes)
+1. QA Anet 10 pasos
+2. Llenar `docs/APL_STAGES.md`
+3. Llenar `docs/actor_odoo_permissions.md`
+4. Firmar Result Packet
+5. Merge PR #1 → main
+
+### Pendientes de seguridad
+- Rotar Odoo API Key Willy expuesta en chat
+- Rotar PAT GitHub expuesto en chat
+- Considerar rotar MCP token Willy
+
+---
 
 ## CIERRE 14-MAY 02:00 UTC — TRI-CANAL OPERATIVO 100%
 
