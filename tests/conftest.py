@@ -108,7 +108,7 @@ def policies_yaml(tmp_path: Path) -> Path:
                 "department_id", "job_id", "parent_id", "user_id", "active",
             ],
             "res.partner": [
-                "id", "name", "display_name", "email", "phone", "mobile",
+                "id", "name", "display_name", "email", "phone",
                 "is_company", "parent_id", "function", "city", "country_id",
                 "category_id", "user_id", "active", "customer_rank", "supplier_rank",
             ],

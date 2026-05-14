@@ -2,6 +2,50 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.3.4] — 2026-05-13 (Fix bug servidor: campo 'mobile' inválido en res.partner)
+
+### Bug identificado durante QA tri-canal 13-may-2026
+
+Claude.ai reportó con precisión técnica:
+`ValueError: Invalid field 'mobile' on 'res.partner'` (reproducible 2/2)
+
+Causa: `PARTNER_SAFE_FIELDS` en `app/tools/partners.py` incluía el campo
+`mobile`, pero en esta instancia Odoo 17/18/19 Community `res.partner` no
+expone ese campo. Probablemente fue removido en versiones recientes o
+nunca estuvo en Community.
+
+Síntoma colateral: ChatGPT chat-mode venía retornando `partners=0` desde
+mediodía (Yuniesky 12 may, Yuniesky 13 may QA tri-canal 10/10). El adapter
+`openai_compat.py` capturaba la excepción Odoo Fault y devolvía
+`results: []` vacío, ocultando el bug. Claude.ai en cambio propagó el
+error textualmente, permitiendo el diagnóstico.
+
+### Changed
+
+- `app/tools/partners.py`:
+  - `PARTNER_SAFE_FIELDS`: removido `mobile` (sigue habiendo `phone`).
+  - `odoo_search_partner`: removida cláusula `("mobile", "ilike", q)` del
+    domain. Ahora busca por name/email/phone.
+  - Docstring y comentario explicativo agregados para evitar regresiones.
+- `config/policies.yaml.example`: removida línea `- mobile` de
+  field_allowlists.res.partner. Comentario inline explicando el motivo.
+- `tests/conftest.py`: removido `"mobile"` del allowlist test de partners.
+
+### Verificación post-fix
+
+- Tests local: **135/135 verde**.
+- Post-deploy: en ChatGPT `search("contactos")` debe retornar >0; en
+  Claude `odoo_list_partners()` debe retornar lista sin error.
+
+### Pendiente colateral (no incluido en este fix)
+
+El adapter `openai_compat.py` debería propagar errores del servidor en
+vez de retornar `results: []` vacío cuando hay Fault de Odoo. Ahora mismo
+oculta bugs reales en ChatGPT chat-mode. Refactor del exception handling
+queda para una próxima iteración.
+
+---
+
 ## [0.3.3] — 2026-05-13 (Fase 4: parser de lenguaje natural server-side)
 
 ### Hito tecnico

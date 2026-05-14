@@ -35,7 +35,7 @@ field_allowlists:
     - display_name
     - email
     - phone
-    - mobile
+    # mobile excluido — no existe en res.partner Odoo 17/18/19 Community
     - is_company
     - parent_id
     - function
