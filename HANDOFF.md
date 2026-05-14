@@ -1,6 +1,25 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~23:30 UTC.
+> Documento operativo para retomar el ticket. **Última actualización:** 13 may 2026 ~23:55 UTC (cierre de jornada).
+
+## Pendiente prioritario al retomar (14-may)
+
+**Diagnosticar bucle "Activa el chip" en ChatGPT de Willy.** Síntoma: tras configurar Custom Instructions con regla preemptiva sobre el conector "Odoo APL 2.0 V2", el modelo responde la línea de activación aunque el chip parece estar activo. Yuniesky funcionando paralelo OK desde su ChatGPT.
+
+Test aislado a ejecutar primero:
+1. Eliminar bloque MCP de Custom Instructions de Willy (dejar solo bloque KAEL).
+2. Chat nuevo ChatGPT + chip activo.
+3. `tail -f /opt/odoo-mcp-v2/logs/audit.jsonl | grep willy` en VPS.
+4. Test: `quien soy`.
+5. Si audit aparece entry willy + respuesta OK → era Custom Instructions. Reescribir REACTIVA.
+6. Si NO aparece → problema UI/cache ChatGPT.
+7. Si aparece con error_class → bug v2 específico Willy.
+
+## Tickets Odoo cerrados hoy
+
+- task:113 ✅ Cerrado formal (Ticket técnico master MCP v2)
+- task:115 ✅ Cerrado formal (Seguimiento cierre formal)
+- task:142 ⏳ Sucesor administrativo activo con prioridad alta — los 5 admin pendientes
 
 ## Estado actual (cierre Fase 4 — 13 may 2026 ~23:25 UTC — Yuniesky escribiendo en Odoo con lenguaje natural puro)
 
