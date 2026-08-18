@@ -12,6 +12,7 @@ from app.schemas import (
     validate_apl_task_input,
     validate_cancel_reason,
     validate_evidence,
+    validate_task_write_payload,
 )
 from app.token_registry import ActorEntry
 
@@ -24,11 +25,6 @@ TASK_SAFE_FIELDS: list[str] = [
     "parent_id", "child_ids",  # jerarquia de subtareas
     # kanban_state excluido: no disponible en Odoo 19 Community sin modulo kanban
 ]
-
-TASK_WRITABLE_FIELDS_BASIC: set[str] = {
-    "name", "description", "priority", "date_deadline",
-    "stage_id", "tag_ids",
-}
 
 
 def _ensure_policy(policy: PolicyEngine, actor: ActorEntry, tool: str, model: str,
@@ -151,13 +147,18 @@ async def odoo_create_project_task_apl(actor: ActorEntry, odoo: OdooClient, poli
 
 async def odoo_update_task_apl(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                                task_id: int, changes: dict) -> dict:
-    """Actualiza campos permitidos de una tarea. Read-after-write."""
-    invalid = [k for k in changes if k not in TASK_WRITABLE_FIELDS_BASIC]
-    if invalid:
-        raise PermissionError(f"fields_not_writable:{invalid}")
+    """Actualiza campos permitidos de una tarea. Read-after-write.
+
+    Contrato de escritura en app.schemas (TASK_FIELD_SPECS / TASK_FIELD_ALIASES,
+    sec G2): acepta el alias `deadline` -> se traduce a `date_deadline`. NO
+    aceptar `deadline` y `date_deadline` a la vez (ambiguo). `project_id` esta
+    BLOQUEADO aqui a proposito — usar odoo_move_task_to_project (sec G1) para
+    reasignar proyecto, no este update generico.
+    """
+    normalized = validate_task_write_payload(changes)
     _ensure_policy(policy, actor, "odoo_update_task_apl", "project.task", "write")
 
-    await odoo.write(actor, "project.task", [task_id], changes)
+    await odoo.write(actor, "project.task", [task_id], normalized)
     after = await odoo.read(actor, "project.task", [task_id], TASK_SAFE_FIELDS)
     return after[0] if after else {"id": task_id, "warning": "read-after-write returned empty"}
 

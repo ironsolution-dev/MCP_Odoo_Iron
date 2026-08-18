@@ -106,8 +106,9 @@ def _help_write_response() -> dict:
         '"area":"<Operaciones|TI|Comercial|...>","task_type":"<Test|Ejecucion|Revision|...>","priority":"P2"}\n\n'
         "Crear To-Do personal (sin proyecto):\n"
         '{"action":"create_todo","title":"[APL 2.0][P2][...][...] ...","description":"...","deadline":"...","area":"...","task_type":"...","priority":"P2"}\n\n'
-        "Actualizar campos de tarea:\n"
-        '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"..."}}\n\n'
+        "Actualizar campos de tarea (acepta alias deadline->date_deadline; "
+        "NO enviar los dos a la vez; project_id NO va aqui, usa move_task_to_project):\n"
+        '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"...","deadline":"YYYY-MM-DD"}}\n\n'
         "Mover tarea a otra etapa:\n"
         '{"action":"move_task","id":"task:<N>","stage_id":<int>}\n\n'
         "Mover tarea a OTRO PROYECTO (distinto de cambiar etapa):\n"

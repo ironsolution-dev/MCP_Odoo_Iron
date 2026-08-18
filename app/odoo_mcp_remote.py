@@ -269,7 +269,7 @@ async def odoo_create_project_task_apl(ctx: Context, project_id: int, payload: d
 
 @mcp.tool()
 async def odoo_update_task_apl(ctx: Context, task_id: int, changes: dict) -> dict:
-    """Actualiza campos permitidos de una tarea en Odoo."""
+    """Actualiza campos permitidos de una tarea en Odoo. Acepta alias deadline->date_deadline (no enviar ambos). Campos: name, description, priority, date_deadline, stage_id, tag_ids, user_ids. project_id NO editable aqui: usa odoo_move_task_to_project."""
     a = _a(); return await _audited(T.odoo_update_task_apl(a, _odoo, _policy, task_id, changes), 'odoo_update_task_apl', a)
 
 @mcp.tool()
@@ -446,7 +446,7 @@ async def create_todo(ctx: Context, title: str, description: str,
 
 @mcp.tool()
 async def update_task(ctx: Context, id: str, changes: dict) -> dict:
-    """Actualiza campos de una tarea. id puede ser "task:42" o "42". Campos editables: name, description, priority, date_deadline, stage_id, tag_ids."""
+    """Actualiza campos de una tarea. id puede ser "task:42" o "42". Campos editables: name, description, priority, date_deadline (alias: deadline; no enviar los dos a la vez), stage_id, tag_ids, user_ids. project_id NO es editable aqui: usa move_task_to_project."""
     a = _a(); return await _audited(OC.update_task(a, _odoo, _policy, id, changes), 'update_task', a)
 
 @mcp.tool()

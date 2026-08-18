@@ -13,8 +13,9 @@ import pytest
 import yaml
 
 from app.policy_engine import PolicyEngine
+from app.schemas import TASK_FIELD_SPECS
 from app.token_registry import ActorEntry, TokenRegistry
-from app.tools.tasks import TASK_WRITABLE_FIELDS_BASIC, odoo_move_task_to_project
+from app.tools.tasks import odoo_move_task_to_project
 
 
 class FakeOdoo:
@@ -152,8 +153,9 @@ async def test_move_task_to_project_invalid_target_zero_writes(
 
 
 # ---------------------------------------------------------------------------
-# Contrato: project_id sigue bloqueado en el update generico
+# Contrato: project_id sigue bloqueado en el update generico (sec G2)
 # ---------------------------------------------------------------------------
 
 def test_project_id_not_in_generic_task_update_fields():
-    assert "project_id" not in TASK_WRITABLE_FIELDS_BASIC
+    assert TASK_FIELD_SPECS["project_id"].kind == "blocked"
+    assert "odoo_move_task_to_project" in TASK_FIELD_SPECS["project_id"].blocked_message
