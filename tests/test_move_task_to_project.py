@@ -1,7 +1,12 @@
 """Tests G1 (Fase A daily driver): odoo_move_task_to_project.
 
 Cubre: exito con chatter [MOVIMIENTO], denegacion por policy (cero writes),
-proyecto destino invalido (cero writes). project_id permanece BLOQUEADO en
+proyecto destino invalido (cero writes), tarea origen inaccesible (cero
+writes), y el facade `openai_compat.move_task_to_project` (gap de reexport
+detectado por julio-qa en el rechazo de Fase A: el facade solo reexportaba
+8 de las 9 funciones de escritura de openai_write_ops.py — la tool MCP
+standalone registrada en odoo_mcp_remote.py pasa por este facade y crasheaba
+con AttributeError en toda invocacion). project_id permanece BLOQUEADO en
 el update generico (sec G2) — esta es la UNICA via para reasignar proyecto.
 """
 
@@ -15,6 +20,7 @@ import yaml
 from app.policy_engine import PolicyEngine
 from app.schemas import TASK_FIELD_SPECS
 from app.token_registry import ActorEntry, TokenRegistry
+from app.tools import openai_compat
 from app.tools.tasks import odoo_move_task_to_project
 
 
@@ -150,6 +156,63 @@ async def test_move_task_to_project_invalid_target_zero_writes(
         await odoo_move_task_to_project(actor, odoo, pe, task_id=42, new_project_id=999)
     assert "project_not_accessible:999" in str(exc.value)
     assert _write_calls(odoo) == []
+
+
+# ---------------------------------------------------------------------------
+# Tarea origen inaccesible (hallazgo menor QA, rechazo Fase A)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_move_task_to_project_task_not_accessible_zero_writes(
+    actors_yaml, policies_yaml, env_actors, token_willy,
+):
+    """read() de la tarea origen devuelve vacio (no existe / sin visibilidad)
+    -> PermissionError task_not_accessible, cero writes. El chequeo ocurre
+    ANTES de resolver el proyecto destino: search_read de project.project
+    tampoco debe dispararse."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo(read_returns={"project.task": []})
+    actor = reg.verify(token_willy)
+
+    with pytest.raises(PermissionError) as exc:
+        await odoo_move_task_to_project(actor, odoo, pe, task_id=999, new_project_id=12)
+    assert "task_not_accessible:999" in str(exc.value)
+    assert _write_calls(odoo) == []
+    assert not any(c[0] == "search_read" for c in odoo.calls)
+
+
+# ---------------------------------------------------------------------------
+# Facade openai_compat — gap de reexport (rechazo Fase A, julio-qa)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_move_task_to_project_reachable_via_openai_compat_facade(
+    actors_yaml, policies_yaml, env_actors, token_willy,
+):
+    """La tool MCP standalone `move_task_to_project` (odoo_mcp_remote.py)
+    llama `OC.move_task_to_project`, es decir openai_compat.move_task_to_project.
+    Este test invoca ESA ruta exacta (no la tasks.py nativa) para que un
+    reexport faltante en el facade rompa aqui, no en produccion via
+    AttributeError como reprodujo julio-qa."""
+    reg = TokenRegistry(actors_yaml)
+    pe = PolicyEngine(policies_yaml)
+    odoo = FakeOdoo(
+        read_returns={
+            "project.task": [{"id": 42, "name": "Migrar reportes",
+                               "project_id": {"id": 3, "name": "Operaciones"}}],
+        },
+        search_read_returns={"project.project": [{"id": 12, "name": "Comercial"}]},
+    )
+    actor = reg.verify(token_willy)
+
+    result = await openai_compat.move_task_to_project(actor, odoo, pe, id="task:42",
+                                                       new_project_id=12)
+
+    assert result["id"] == "task:42"
+    assert result["metadata"]["name"] == "Migrar reportes"
+    write_calls = [c for c in odoo.calls if c[0] == "write"]
+    assert write_calls == [("write", "project.task", (42,), {"project_id": 12})]
 
 
 # ---------------------------------------------------------------------------

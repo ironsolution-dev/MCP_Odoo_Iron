@@ -55,5 +55,6 @@ from app.tools.openai_write_ops import (  # noqa: F401
     create_task,
     create_todo,
     move_task,
+    move_task_to_project,
     update_task,
 )
