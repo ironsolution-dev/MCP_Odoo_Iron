@@ -87,6 +87,28 @@ Prohibidos: vat, street, street2, zip, bank_ids, credit, debit, total_invoiced, 
 
 `odoo_search_partner` NO admite filtros por `vat` / `ref` / `street`.
 
+### `mail.message` / `ir.attachment` — Discuss (sec G4, ADR-013/014)
+
+Permitidos `mail.message`: `id, body, author_id, date, message_type, attachment_ids`.
+Permitidos `ir.attachment`: `id, name, mimetype, file_size, create_date, create_uid, res_model, res_id, url, type, description` (compartido por `attachments.py` y `discuss.py`). **NO incluye `datas`**: el binario nunca viaja al LLM, solo se usa internamente para copiar un adjunto hacia una tarea.
+
+## Allowlist de canales de Discuss (sec G4, ADR-013)
+
+Cada policy declara opcionalmente `discuss_channel_allowlist: [ids]` en `config/policies.yaml`. **Ausencia de la clave = deny para TODOS los canales**, sin excepcion implicita. Las tools de `app/tools/discuss.py` hacen doble chequeo: `policy.allows(modelo, accion)` + `policy.discuss_channel_allowed(policy, channel_id)`.
+
+En Fase A solo `owner_policy` declara `discuss_channel_allowlist: [53]` (canal Contabilidad). `operations_policy` y `medical_direction_policy` quedan denegadas para Discuss por defecto.
+
+Un canal fuera de la allowlist se deniega con `discuss_channel_not_allowed:<id>` **aunque el ID exista y sea alcanzable en Odoo** — el error no distingue "no existe" de "no autorizado".
+
+## Adjuntos: copiar, nunca mover (sec G4, ADR-014)
+
+`odoo_attach_discuss_attachment_to_task` **SIEMPRE copia**, nunca mueve el adjunto original. Orden de verificacion (cada paso corta el flujo si falla):
+
+1. El `attachment_id` DEBE pertenecer a un `mail.message` de ESE canal allowlisted — verificado server-side cruzando contra Odoo, no se confia en el `channel_id` que manda el cliente.
+2. `file_size` se valida contra `policy.attachment_max_bytes(policy)` (default 10 MB, `discuss_attachment_max_bytes` en config) **ANTES** de pedir el campo `datas` (el binario).
+3. La tarea destino debe ser visible para el actor.
+4. Solo entonces se lee el binario y se crea un `ir.attachment` **nuevo** en la tarea. El adjunto y el mensaje origen quedan intactos: nunca hay `write` ni `unlink` sobre el original.
+
 ## Tools prohibidas (sec 9.9)
 
 Bajo NINGUNA circunstancia:

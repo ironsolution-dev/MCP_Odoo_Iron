@@ -76,6 +76,9 @@
 | Schemas | [app/schemas.py](app/schemas.py) | Validadores APL 2.0, fechas, evidencia |
 | Odoo client | [app/odoo_client.py](app/odoo_client.py) | XML-RPC actor-aware con UID cache 5min |
 | Tools | [app/tools/*.py](app/tools/) | Tools por dominio (tasks, projects, calendar, employees, crm, partners, system) |
+| Discuss | [app/tools/discuss.py](app/tools/discuss.py) | Leer/postear canal (mail.message model=discuss.channel) + copiar adjunto hacia tarea (sec G4, ADR-013/014) |
+| Task assignment | [app/tools/task_assignment.py](app/tools/task_assignment.py) | Salvaguarda: `user_ids` solo escribible si mapea a hr.employee activo (sec G3) |
+| OpenAI compat | [app/tools/openai_search.py](app/tools/openai_search.py), [openai_write_dispatch.py](app/tools/openai_write_dispatch.py), [openai_write_ops.py](app/tools/openai_write_ops.py), [openai_formatters.py](app/tools/openai_formatters.py) | `search`/`fetch` + protocolo de escritura para ChatGPT chat-mode; `openai_compat.py` es el facade publico (ADR-011) |
 
 ## Flujo de auth
 
@@ -115,6 +118,11 @@ Ver `docs/adr/`. Las decisiones centrales están cerradas:
 - ADR-008 Blue/Green, BLUE intocable.
 - ADR-009 `res.partner` read-only allowlist.
 - ADR-010 Dual connector Claude.ai + ChatGPT.
+- ADR-011 Split facade de `openai_compat.py` (Fase A, sec G1).
+- ADR-012 Contrato de escritura de tareas: alias + validacion agregada (Fase A, sec G2).
+- ADR-013 Allowlist de canales de Discuss por policy (Fase A, sec G4).
+- ADR-014 Adjuntos de Discuss: copiar, nunca mover (Fase A, sec G4).
+- ADR-015 Trazabilidad build↔git permanente (Fase A, sec G5).
 
 ## Limits operativos fase 1
 
