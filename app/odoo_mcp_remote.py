@@ -27,6 +27,7 @@ from app.token_registry import ActorEntry, TokenRegistry
 from app.tools import system as S, tasks as T, projects as P
 from app.tools import calendar as C, employees as E, crm as CR, partners as PA
 from app.tools import attachments as AT
+from app.tools import discuss as D
 from app.tools import openai_compat as OC
 
 # ---------------------------------------------------------------------------
@@ -409,6 +410,25 @@ async def odoo_list_attachments(ctx: Context, model: str, record_id: int, limit:
 async def odoo_get_attachment(ctx: Context, attachment_id: int) -> dict:
     """Obtiene los metadatos y URL de descarga de un adjunto específico por ID."""
     a = _a(); return await _audited(AT.odoo_get_attachment(a, _odoo, _policy, attachment_id), 'odoo_get_attachment', a)
+
+# ---------------------------------------------------------------------------
+# Discuss (sec G4) — canales allowlisted por policy. Fase 1: solo owner_policy.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def odoo_read_discuss_channel(ctx: Context, channel_id: int, limit: int = 50) -> list:
+    """Lee mensajes de un canal de Discuss (chatter de discuss.channel). Solo canales explicitamente allowlisted por policy — deniega aunque el ID exista."""
+    a = _a(); return await _audited(D.odoo_read_discuss_channel(a, _odoo, _policy, channel_id, limit=limit), 'odoo_read_discuss_channel', a)
+
+@mcp.tool()
+async def odoo_post_discuss_message(ctx: Context, channel_id: int, body: str) -> dict:
+    """Posta un mensaje de texto plano en un canal de Discuss allowlisted. Read-after-write."""
+    a = _a(); return await _audited(D.odoo_post_discuss_message(a, _odoo, _policy, channel_id, body), 'odoo_post_discuss_message', a)
+
+@mcp.tool()
+async def odoo_attach_discuss_attachment_to_task(ctx: Context, channel_id: int, attachment_id: int, task_id: int) -> dict:
+    """Copia (NUNCA mueve) un adjunto de un mensaje de Discuss hacia una tarea. El adjunto original y el mensaje del canal quedan intactos. Verifica tamano ANTES de leer el binario."""
+    a = _a(); return await _audited(D.odoo_attach_discuss_attachment_to_task(a, _odoo, _policy, channel_id, attachment_id, task_id), 'odoo_attach_discuss_attachment_to_task', a)
 
 # ---------------------------------------------------------------------------
 # OpenAI ChatGPT chat-mode adapter: search + fetch

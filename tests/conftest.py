@@ -112,6 +112,13 @@ def policies_yaml(tmp_path: Path) -> Path:
                 "is_company", "parent_id", "function", "city", "country_id",
                 "category_id", "user_id", "active", "customer_rank", "supplier_rank",
             ],
+            "mail.message": [
+                "id", "body", "author_id", "date", "message_type", "attachment_ids",
+            ],
+            "ir.attachment": [
+                "id", "name", "mimetype", "file_size", "create_date", "create_uid",
+                "res_model", "res_id", "url", "type", "description",
+            ],
         },
         "policies": {
             "owner_policy": {
@@ -129,6 +136,8 @@ def policies_yaml(tmp_path: Path) -> Path:
                     "odoo_list_crm_leads", "odoo_get_crm_lead",
                     "odoo_add_crm_note", "odoo_create_crm_activity",
                     "odoo_list_partners", "odoo_get_partner", "odoo_search_partner",
+                    "odoo_read_discuss_channel", "odoo_post_discuss_message",
+                    "odoo_attach_discuss_attachment_to_task",
                 ],
                 "model_rules": {
                     "project.task":    {"read": True,  "create": True,  "write": True,  "unlink": False},
@@ -138,8 +147,11 @@ def policies_yaml(tmp_path: Path) -> Path:
                     "res.partner":     {"read": True,  "create": False, "write": False, "unlink": False},
                     "crm.lead":        {"read": True,  "create": False, "write": False, "unlink": False},
                     "mail.message":    {"read": True,  "create": True,  "write": False, "unlink": False},
+                    "ir.attachment":   {"read": True,  "create": True,  "write": False, "unlink": False},
                 },
                 "rate_limit": {"requests_per_minute": 60, "writes_per_minute": 20},
+                "discuss_channel_allowlist": [53],
+                "discuss_attachment_max_bytes": 10485760,
             },
             "operations_policy": {
                 "allowed_tools": [

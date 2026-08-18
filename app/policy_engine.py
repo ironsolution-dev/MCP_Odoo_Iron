@@ -100,3 +100,26 @@ class PolicyEngine:
             requests_per_minute=int(rl.get("requests_per_minute", 30)),
             writes_per_minute=int(rl.get("writes_per_minute", 10)),
         )
+
+    # ------------------------------------------------------------------
+    # Discuss (sec G4) — canales de mail.message(model=discuss.channel)
+    # ------------------------------------------------------------------
+
+    def discuss_channel_allowed(self, policy_name: str, channel_id: int) -> PolicyDecision:
+        """Allowlist de canales de Discuss por policy. AUSENCIA de la clave
+        (o lista vacia) = deny para TODOS los canales — deny-by-default, sin
+        excepcion implicita para ningun rol."""
+        policy = self.policies.get(policy_name)
+        if not policy:
+            return PolicyDecision(False, f"unknown_policy:{policy_name}")
+        allowlist = policy.get("discuss_channel_allowlist") or []
+        if channel_id not in allowlist:
+            return PolicyDecision(False, f"discuss_channel_not_allowed:{channel_id}")
+        return PolicyDecision(True)
+
+    def attachment_max_bytes(self, policy_name: str) -> int:
+        """Limite de tamano (bytes) para copiar adjuntos de Discuss hacia una
+        tarea. Default conservador (10 MB, espeja discuss.DEFAULT_ATTACHMENT_MAX_BYTES)
+        si la policy no lo declara explicitamente."""
+        policy = self.policies.get(policy_name) or {}
+        return int(policy.get("discuss_attachment_max_bytes", 10 * 1024 * 1024))
