@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -29,9 +30,22 @@ async def odoo_who_am_i(actor: ActorEntry, odoo: OdooClient) -> dict[str, Any]:
     }
 
 
+def _build_identity() -> dict[str, str]:
+    """git_commit/mcp_version inyectados en build time (Dockerfile ARG ->
+    ENV, sec G5). 'unknown' fuera de un build real (ej. pytest local) — eso
+    mismo es la senal de que algo no se construyo con deploy_green.sh."""
+    return {
+        "git_commit": os.environ.get("MCP_GIT_COMMIT", "unknown"),
+        "mcp_version": os.environ.get("MCP_VERSION", "unknown"),
+    }
+
+
 async def odoo_health(actor: ActorEntry, odoo: OdooClient) -> dict[str, Any]:
-    """Healthcheck minimo MCP + auth Odoo. NO toca tools de negocio."""
+    """Healthcheck minimo MCP + auth Odoo. NO toca tools de negocio.
+    Incluye git_commit/mcp_version para verificar en caliente que lo
+    desplegado coincide con lo que se penso desplegar (anti-drift, sec G5)."""
     uptime_seconds = int(time.time() - _BOOT_TIME)
+    build = _build_identity()
     try:
         uid = await odoo.authenticate(actor)
         odoo_auth_ok = bool(uid)
@@ -41,6 +55,7 @@ async def odoo_health(actor: ActorEntry, odoo: OdooClient) -> dict[str, Any]:
             "uptime_seconds": uptime_seconds,
             "odoo_auth_ok": False,
             "odoo_error_class": e.__class__.__name__,
+            **build,
         }
     try:
         version = await odoo.server_version(actor)
@@ -52,6 +67,7 @@ async def odoo_health(actor: ActorEntry, odoo: OdooClient) -> dict[str, Any]:
         "odoo_auth_ok": odoo_auth_ok,
         "odoo_uid": uid,
         "odoo_server_version": version,
+        **build,
     }
 
 

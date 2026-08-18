@@ -1,9 +1,18 @@
 FROM python:3.12-slim
 
+# Trazabilidad build<->git (sec G5, cierre anti-drift): se inyectan en build
+# time via --build-arg (scripts/deploy_green.sh) y quedan expuestos en
+# odoo_health() para poder verificar en caliente que lo desplegado coincide
+# con el commit/tag que se PENSABA desplegar.
+ARG GIT_COMMIT=unknown
+ARG MCP_VERSION=unknown
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    MCP_GIT_COMMIT=${GIT_COMMIT} \
+    MCP_VERSION=${MCP_VERSION}
 
 WORKDIR /app
 

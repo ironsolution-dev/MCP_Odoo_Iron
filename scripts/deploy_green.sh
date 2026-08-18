@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION="${1:-multiuser-v0.1.0}"
+VERSION="${1:-multiuser-v0.4.0}"
 SECRETS_DIR="${SECRETS_DIR:-/opt/odoo-mcp-v2/secrets}"
 LOGS_DIR="${LOGS_DIR:-/opt/odoo-mcp-v2/logs}"
 
@@ -16,11 +16,31 @@ for f in "${SECRETS_DIR}/.env.v2" "${SECRETS_DIR}/actors.yaml" "${SECRETS_DIR}/p
     exit 1
   fi
 done
+
+# Anti-drift (sec G5): lo que se despliega DEBE ser exactamente lo que esta
+# en git, ni una linea sin commitear, y con un tag que confirme que ESE
+# commit es el que se penso liberar como ${VERSION}. Sin esto, "funciona en
+# mi maquina" puede terminar en el contenedor sin que quede registro.
+GIT_COMMIT="$(git rev-parse HEAD)"
+if [ -n "$(git status --porcelain)" ]; then
+  echo "  FAIL working tree sucio — commitea o descarta antes de desplegar:"
+  git status --porcelain
+  exit 1
+fi
+if ! git tag --points-at HEAD | grep -qx "${VERSION}"; then
+  echo "  FAIL HEAD (${GIT_COMMIT}) no tiene el tag ${VERSION}."
+  echo "  Tags en HEAD: $(git tag --points-at HEAD | tr '\n' ' ')"
+  echo "  Crea el tag antes de desplegar: git tag ${VERSION}"
+  exit 1
+fi
 mkdir -p "${LOGS_DIR}"
 touch "${LOGS_DIR}/audit.jsonl"
 
-echo "[2/5] Build imagen odoo-mcp:${VERSION} ..."
-docker build -t "odoo-mcp:${VERSION}" .
+echo "[2/5] Build imagen odoo-mcp:${VERSION} (commit ${GIT_COMMIT}) ..."
+docker build \
+  --build-arg "GIT_COMMIT=${GIT_COMMIT}" \
+  --build-arg "MCP_VERSION=${VERSION}" \
+  -t "odoo-mcp:${VERSION}" .
 
 echo "[3/5] Stop+rm GREEN existente si hay ..."
 docker stop odoo-mcp-v2 2>/dev/null || true
