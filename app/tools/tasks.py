@@ -15,6 +15,7 @@ from app.schemas import (
     validate_task_write_payload,
 )
 from app.token_registry import ActorEntry
+from app.tools.task_assignment import _validate_assignable_user_ids
 
 
 # Campos seguros para devolver al LLM en lecturas/responses.
@@ -153,10 +154,15 @@ async def odoo_update_task_apl(actor: ActorEntry, odoo: OdooClient, policy: Poli
     sec G2): acepta el alias `deadline` -> se traduce a `date_deadline`. NO
     aceptar `deadline` y `date_deadline` a la vez (ambiguo). `project_id` esta
     BLOQUEADO aqui a proposito — usar odoo_move_task_to_project (sec G1) para
-    reasignar proyecto, no este update generico.
+    reasignar proyecto, no este update generico. `user_ids` se valida contra
+    hr.employee activo antes de escribir (sec G3, _validate_assignable_user_ids).
     """
     normalized = validate_task_write_payload(changes)
     _ensure_policy(policy, actor, "odoo_update_task_apl", "project.task", "write")
+
+    if "user_ids" in normalized:
+        normalized["user_ids"] = await _validate_assignable_user_ids(
+            odoo, actor, normalized["user_ids"])
 
     await odoo.write(actor, "project.task", [task_id], normalized)
     after = await odoo.read(actor, "project.task", [task_id], TASK_SAFE_FIELDS)
