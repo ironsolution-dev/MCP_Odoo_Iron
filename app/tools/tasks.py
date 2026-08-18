@@ -171,6 +171,43 @@ async def odoo_move_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngi
     return after[0] if after else {"id": task_id, "warning": "read-after-write returned empty"}
 
 
+async def odoo_move_task_to_project(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
+                                    task_id: int, new_project_id: int) -> dict:
+    """Mueve una tarea a otro proyecto (reasigna project_id).
+
+    UNICA via para reasignar proyecto: `project_id` esta BLOQUEADO en
+    odoo_update_task_apl / TASK_FIELD_SPECS a proposito (sec G2) — cambiar de
+    proyecto es una operacion con verificacion de visibilidad propia, no un
+    campo mas del update generico. Registra el movimiento en el chatter
+    (auditoria humana visible) antes de escribir. Read-after-write.
+    """
+    _ensure_policy(policy, actor, "odoo_move_task_to_project", "project.task", "write")
+
+    pre = await odoo.read(actor, "project.task", [task_id], ["id", "name", "project_id"])
+    if not pre:
+        raise PermissionError(f"task_not_accessible:{task_id}")
+    old_project = pre[0].get("project_id")
+    old_name = old_project.get("name") if isinstance(old_project, dict) else "Personal"
+
+    visible = await odoo.search_read(actor, "project.project", [("id", "=", new_project_id)],
+                                     ["id", "name"], limit=1)
+    if not visible:
+        raise PermissionError(f"project_not_accessible:{new_project_id}")
+    new_name = visible[0].get("name") or f"proyecto {new_project_id}"
+
+    await odoo.call(actor, "project.task", "message_post", [[task_id]],
+                    {"body": f"[MOVIMIENTO] de {old_name} a {new_name}"})
+    await odoo.write(actor, "project.task", [task_id], {"project_id": new_project_id})
+
+    after = await odoo.read(actor, "project.task", [task_id], TASK_SAFE_FIELDS)
+    return {
+        "task": after[0] if after else {"id": task_id, "warning": "read-after-write returned empty"},
+        "moved": True,
+        "from_project": old_name,
+        "to_project": new_name,
+    }
+
+
 async def odoo_mark_task_done(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                               task_id: int, evidence: str, done_stage_id: int) -> dict:
     """Cierra una tarea exigiendo evidencia (APL 2.0: no cerrar sin evidencia).

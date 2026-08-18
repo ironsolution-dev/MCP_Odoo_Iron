@@ -63,6 +63,7 @@ policies:
       - odoo_create_project_task_apl
       - odoo_update_task_apl
       - odoo_move_task
+      - odoo_move_task_to_project
       - odoo_mark_task_done
       - odoo_cancel_task
       - odoo_list_projects
@@ -112,6 +113,7 @@ policies:
       - odoo_create_project_task_apl
       - odoo_update_task_apl
       - odoo_move_task
+      - odoo_move_task_to_project
       - odoo_mark_task_done
       - odoo_cancel_task
       - odoo_list_projects
@@ -151,6 +153,7 @@ policies:
       - odoo_create_project_task_apl
       - odoo_update_task_apl
       - odoo_move_task
+      - odoo_move_task_to_project
       - odoo_mark_task_done
       - odoo_cancel_task
       - odoo_list_projects

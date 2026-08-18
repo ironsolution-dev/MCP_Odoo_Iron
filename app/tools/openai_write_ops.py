@@ -103,6 +103,16 @@ async def move_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                                                             "detail": result}
 
 
+async def move_task_to_project(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
+                               id: Any, new_project_id: int) -> dict:
+    """Mueve una tarea a otro proyecto (reasigna project_id). Distinto de
+    move_task, que solo cambia de etapa dentro del mismo proyecto."""
+    task_id = _parse_id(id, "task")
+    result = await tsk.odoo_move_task_to_project(actor, odoo, policy, task_id, new_project_id)
+    return _full(result["task"], "task") if result.get("moved") else {"error": "move_failed",
+                                                                       "detail": result}
+
+
 async def close_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                      id: Any, evidence: str, done_stage_id: int) -> dict:
     """Cierra una tarea con evidencia obligatoria. La evidencia queda en el

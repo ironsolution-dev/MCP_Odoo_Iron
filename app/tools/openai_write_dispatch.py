@@ -29,6 +29,7 @@ from app.tools.openai_write_ops import (
     create_task,
     create_todo,
     move_task,
+    move_task_to_project,
     update_task,
 )
 
@@ -48,7 +49,7 @@ _WRITE_VERB_RE = re.compile(
 _VALID_ACTIONS = {
     "whoami",
     "create_task", "create_todo", "update_task",
-    "move_task", "close_task", "cancel_task",
+    "move_task", "move_task_to_project", "close_task", "cancel_task",
     "create_project", "create_event",
 }
 
@@ -109,6 +110,8 @@ def _help_write_response() -> dict:
         '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"..."}}\n\n'
         "Mover tarea a otra etapa:\n"
         '{"action":"move_task","id":"task:<N>","stage_id":<int>}\n\n'
+        "Mover tarea a OTRO PROYECTO (distinto de cambiar etapa):\n"
+        '{"action":"move_task_to_project","id":"task:<N>","new_project_id":<int>}\n\n'
         "Cerrar tarea con evidencia (obligatoria APL 2.0):\n"
         '{"action":"close_task","id":"task:<N>","evidence":"<texto suficiente>","done_stage_id":<int>}\n\n'
         "Cancelar tarea con motivo:\n"
@@ -186,6 +189,12 @@ async def _execute_action(payload: dict, actor: ActorEntry, odoo: OdooClient,
                 actor, odoo, policy,
                 id=payload["id"],
                 stage_id=int(payload["stage_id"]),
+            )
+        elif action == "move_task_to_project":
+            result = await move_task_to_project(
+                actor, odoo, policy,
+                id=payload["id"],
+                new_project_id=int(payload["new_project_id"]),
             )
         elif action == "close_task":
             result = await close_task(

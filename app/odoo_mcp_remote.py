@@ -197,8 +197,8 @@ mcp = FastMCP(
         "WRITES (esto es CRITICO): para crear, modificar, cerrar, cancelar o mover "
         "tareas/proyectos/eventos, DEBES llamar search() pasando un STRING JSON "
         "como query. El JSON debe tener clave 'action' con uno de estos valores: "
-        "create_task, create_todo, update_task, move_task, close_task, cancel_task, "
-        "create_project, create_event, whoami. "
+        "create_task, create_todo, update_task, move_task, move_task_to_project, "
+        "close_task, cancel_task, create_project, create_event, whoami. "
         ""
         "EJEMPLO de write: el usuario dice 'crea una tarea de X en proyecto Y'. "
         "Tu DEBES armar el JSON con todos los campos APL 2.0 (project_id, title con "
@@ -276,6 +276,11 @@ async def odoo_update_task_apl(ctx: Context, task_id: int, changes: dict) -> dic
 async def odoo_move_task(ctx: Context, task_id: int, stage_id: int) -> dict:
     """Mueve una tarea a otra etapa del APL 2.0."""
     a = _a(); return await _audited(T.odoo_move_task(a, _odoo, _policy, task_id, stage_id), 'odoo_move_task', a)
+
+@mcp.tool()
+async def odoo_move_task_to_project(ctx: Context, task_id: int, new_project_id: int) -> dict:
+    """Mueve una tarea a otro proyecto. Registra el movimiento en el chatter y hace read-after-write. NO usar update_task/odoo_update_task_apl para esto: project_id esta bloqueado ahi a proposito."""
+    a = _a(); return await _audited(T.odoo_move_task_to_project(a, _odoo, _policy, task_id, new_project_id), 'odoo_move_task_to_project', a)
 
 @mcp.tool()
 async def odoo_mark_task_done(ctx: Context, task_id: int, evidence: str, done_stage_id: int) -> dict:
@@ -448,6 +453,11 @@ async def update_task(ctx: Context, id: str, changes: dict) -> dict:
 async def move_task(ctx: Context, id: str, stage_id: int) -> dict:
     """Mueve una tarea a otra etapa. Usa odoo_validate_apl_stages para conocer stage_ids disponibles."""
     a = _a(); return await _audited(OC.move_task(a, _odoo, _policy, id, stage_id), 'move_task', a)
+
+@mcp.tool()
+async def move_task_to_project(ctx: Context, id: str, new_project_id: int) -> dict:
+    """Mueve una tarea a otro proyecto. Distinto de move_task (que solo cambia de etapa)."""
+    a = _a(); return await _audited(OC.move_task_to_project(a, _odoo, _policy, id, new_project_id), 'move_task_to_project', a)
 
 @mcp.tool()
 async def close_task(ctx: Context, id: str, evidence: str, done_stage_id: int) -> dict:
