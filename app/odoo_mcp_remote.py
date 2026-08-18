@@ -26,6 +26,8 @@ from app.rate_limit import RateLimiter
 from app.token_registry import ActorEntry, TokenRegistry
 from app.tools import system as S, tasks as T, projects as P
 from app.tools import calendar as C, employees as E, crm as CR, partners as PA
+from app.tools import attachments as AT
+from app.tools import openai_compat as OC
 
 # ---------------------------------------------------------------------------
 # ContextVar: pasa el actor desde middleware a cada tool
@@ -55,17 +57,15 @@ _JSON_401 = (
     b'{"jsonrpc":"2.0","id":null,'
     b'"error":{"code":-32001,"message":"Unauthorized: invalid_token"}}'
 )
-_JSON_DISCOVERY = (
-    b'{"jsonrpc":"2.0","result":{"name":"odoo-mcp-v2","version":"0.1.0"}}'
-)
 
 
 class BearerMiddleware:
-    """Middleware ASGI que:
-    1. Extrae token de Bearer header, X-Api-Key o path opaco /mcp/<token>.
-    2. Reescribe /mcp/<token> → /mcp para que FastMCP lo procese correctamente.
-    3. Devuelve 401 si el token no es válido en requests POST.
-    4. Devuelve 200 JSON discovery para GET sin Accept: text/event-stream.
+    """Middleware ASGI mínimamente invasivo:
+    - GET /mcp: pasa directo a FastMCP (que maneja SSE o devuelve 406 si no es SSE,
+      tal como BLUE). NO intercepta para evitar romper el protocolo MCP estándar.
+    - POST /mcp: extrae token de Bearer, X-Api-Key o path opaco. Reescribe
+      /mcp/<token> → /mcp y autentica al actor. 401 si el token no es válido.
+    - Resto de paths: pasa directo.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -83,23 +83,17 @@ class BearerMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # GET: pasar directo a FastMCP. Si Accept incluye text/event-stream,
+        # FastMCP abre SSE; si no, devuelve 406 (comportamiento estándar MCP).
+        if method == 'GET':
+            await self.app(scope, receive, send)
+            return
+
+        # POST: requiere autenticacion.
         headers_raw = dict(scope.get('headers', []))
         auth      = headers_raw.get(b'authorization', b'').decode()
         x_api_key = headers_raw.get(b'x-api-key', b'').decode()
         ua        = headers_raw.get(b'user-agent', b'').decode()
-        accept    = headers_raw.get(b'accept', b'').decode()
-
-        # --- GET: discovery / SSE ---
-        if method == 'GET':
-            if 'text/event-stream' not in accept:
-                # ChatGPT preflight — devolver 200 JSON sin llegar a FastMCP
-                await self._send_json(send, 200, _JSON_DISCOVERY)
-                return
-            # SSE legítimo (Claude.ai) — pasar sin auth
-            await self.app(scope, receive, send)
-            return
-
-        # --- POST: requiere autenticacion ---
         token, src = AuthMiddleware.extract_token(auth, path, x_api_key)
         actor = _registry.verify(token) if _registry else None
 
@@ -154,13 +148,21 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
     try:
         result = await coro
         if _mw and actor:
+            # Para search/fetch que devuelven {"results": [...]} contar el array
+            # interno. Para listas contar largo. Para otros dicts contar 1.
+            if isinstance(result, list):
+                rc = len(result)
+            elif isinstance(result, dict) and isinstance(result.get('results'), list):
+                rc = len(result['results'])
+            else:
+                rc = 1
             _mw.audit.emit(
                 actor=actor.actor,
                 role=actor.role,
                 tool=tool_name,
                 allowed=True,
                 latency_ms=now_ms() - start,
-                result_count=len(result) if isinstance(result, list) else 1,
+                result_count=rc,
             )
         return result
     except Exception as exc:
@@ -181,8 +183,48 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
 # ---------------------------------------------------------------------------
 # FastMCP + registro de tools
 # ---------------------------------------------------------------------------
-mcp = FastMCP('odoo-mcp-v2', stateless_http=True, json_response=True,
-              host='0.0.0.0', port=8000)
+mcp = FastMCP(
+    'odoo-mcp-v2',
+    instructions=(
+        "Servidor MCP multiusuario para Odoo APL 2.0 con capacidad COMPLETA "
+        "de lectura Y escritura. ChatGPT chat-mode descubre `search(query)` y "
+        "`fetch(id)` — usalas para TODO. "
+        ""
+        "READS: search('mis tareas'), search('proyectos'), search('empleados'), "
+        "search('contactos'), search('leads crm'), search('eventos'), "
+        "search('quien soy'). Drill-down con fetch('task:N'), fetch('project:N'), etc. "
+        ""
+        "WRITES (esto es CRITICO): para crear, modificar, cerrar, cancelar o mover "
+        "tareas/proyectos/eventos, DEBES llamar search() pasando un STRING JSON "
+        "como query. El JSON debe tener clave 'action' con uno de estos valores: "
+        "create_task, create_todo, update_task, move_task, close_task, cancel_task, "
+        "create_project, create_event, whoami. "
+        ""
+        "EJEMPLO de write: el usuario dice 'crea una tarea de X en proyecto Y'. "
+        "Tu DEBES armar el JSON con todos los campos APL 2.0 (project_id, title con "
+        "formato [APL 2.0][P0-3][Area][Tipo] verbo+entregable, description con 8 "
+        "campos obligatorios: Objetivo/Entregable/Responsable/Fecha limite/Criterio "
+        "de cierre/Evidencia requerida/Riesgo si no se cierra/Siguiente accion, "
+        "deadline, area, task_type, priority) y llamar search(query=JSON_STRING). "
+        ""
+        "PROHIBIDO responder 'no puedo escribir' o 'no hay endpoint' — SI HAY "
+        "endpoint, es esta misma tool search(). Si te falta un dato pregunta al "
+        "usuario, NO inventes que no se puede. "
+        ""
+        "Si llamas search() con verbos de escritura sin JSON, recibiras un "
+        "help_response — eso es una INSTRUCCION para ti (no info para el usuario): "
+        "arma el JSON con los datos que tengas y llama search() de nuevo en el "
+        "siguiente turno. "
+        ""
+        "Validaciones server-side: APL 2.0 strict (6 campos title+desc), "
+        "read-after-write, policy engine. Si la creacion falla, devuelvo error "
+        "claro con el campo problema — reintenta con el dato corregido."
+    ),
+    stateless_http=True,
+    json_response=True,
+    host='0.0.0.0',
+    port=8000,
+)
 
 
 @mcp.tool()
@@ -342,6 +384,94 @@ async def odoo_get_partner(ctx: Context, partner_id: int) -> dict:
 async def odoo_search_partner(ctx: Context, query: str, limit: int = 20) -> list:
     """Busca contactos por nombre, email o teléfono en Odoo."""
     a = _a(); return await _audited(PA.odoo_search_partner(a, _odoo, _policy, query, limit=limit), 'odoo_search_partner', a)
+
+@mcp.tool()
+async def odoo_get_task(ctx: Context, task_id: int) -> dict:
+    """Obtiene el detalle completo de una tarea por ID, incluyendo padre y subtareas."""
+    a = _a(); return await _audited(T.odoo_get_task(a, _odoo, _policy, task_id), 'odoo_get_task', a)
+
+@mcp.tool()
+async def odoo_task_subtasks(ctx: Context, parent_task_id: int, limit: int = 100) -> list:
+    """Lista las subtareas (hijas) de una tarea padre en Odoo."""
+    a = _a(); return await _audited(T.odoo_task_subtasks(a, _odoo, _policy, parent_task_id, limit=limit), 'odoo_task_subtasks', a)
+
+@mcp.tool()
+async def odoo_list_attachments(ctx: Context, model: str, record_id: int, limit: int = 50) -> list:
+    """Lista adjuntos (archivos, imágenes, documentos) asociados a un registro de Odoo. Acepta model='project.task' o 'project.project'. Retorna metadatos + URL de descarga."""
+    a = _a(); return await _audited(AT.odoo_list_attachments(a, _odoo, _policy, model, record_id, limit=limit), 'odoo_list_attachments', a)
+
+@mcp.tool()
+async def odoo_get_attachment(ctx: Context, attachment_id: int) -> dict:
+    """Obtiene los metadatos y URL de descarga de un adjunto específico por ID."""
+    a = _a(); return await _audited(AT.odoo_get_attachment(a, _odoo, _policy, attachment_id), 'odoo_get_attachment', a)
+
+# ---------------------------------------------------------------------------
+# OpenAI ChatGPT chat-mode adapter: search + fetch
+# ChatGPT chat-mode solo descubre tools con estos 2 nombres exactos. Routean
+# internamente a las tools odoo_* segun query/id. Claude.ai sigue viendo todo.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def search(ctx: Context, query: str) -> dict:
+    """Busca tareas, proyectos, empleados, contactos, leads o eventos en Odoo segun el texto del query. Devuelve {results:[{id,title,text,url}]} con ids "<kind>:<num>" para usar con fetch(). Usa esta tool cuando el usuario pida ver/listar/buscar cualquier cosa en Odoo: tareas, proyectos, contactos, etc."""
+    a = _a(); return await _audited(OC.search(a, _odoo, _policy, query), 'search', a)
+
+@mcp.tool()
+async def fetch(ctx: Context, id: str) -> dict:
+    """Obtiene el detalle completo de un registro Odoo por id compuesto. El id debe ser "<kind>:<num>" donde kind es task/project/employee/partner/lead. Por ejemplo "task:42" o "project:7". Usalo despues de search() para profundizar en un resultado."""
+    a = _a(); return await _audited(OC.fetch(a, _odoo, _policy, id), 'fetch', a)
+
+
+# Write tools — nombres simples que ChatGPT chat-mode puede descubrir. Cada uno
+# enruta a la tool odoo_* nativa correspondiente con APL 2.0 + read-after-write.
+
+@mcp.tool()
+async def create_task(ctx: Context, project_id: int, title: str, description: str,
+                       deadline: str, area: str, task_type: str,
+                       priority: str = "P2") -> dict:
+    """Crea una tarea APL 2.0 dentro de un proyecto. project_id obligatorio. APL 2.0 exige 6 campos: title (6+ chars), description (con Objetivo/Resultado/Pasos/Dependencias/Riesgos/Validacion/Plazo/Notas), deadline (YYYY-MM-DD), area (dominio funcional), task_type (tipo de trabajo), priority (P1/P2/P3, default P2)."""
+    a = _a(); return await _audited(OC.create_task(a, _odoo, _policy, project_id, title, description, deadline, area, task_type, priority), 'create_task', a)
+
+@mcp.tool()
+async def create_todo(ctx: Context, title: str, description: str,
+                       deadline: str, area: str, task_type: str,
+                       priority: str = "P2") -> dict:
+    """Crea un To-Do personal APL 2.0 sin proyecto. Mismos 6 campos APL que create_task pero sin project_id."""
+    a = _a(); return await _audited(OC.create_todo(a, _odoo, _policy, title, description, deadline, area, task_type, priority), 'create_todo', a)
+
+@mcp.tool()
+async def update_task(ctx: Context, id: str, changes: dict) -> dict:
+    """Actualiza campos de una tarea. id puede ser "task:42" o "42". Campos editables: name, description, priority, date_deadline, stage_id, tag_ids."""
+    a = _a(); return await _audited(OC.update_task(a, _odoo, _policy, id, changes), 'update_task', a)
+
+@mcp.tool()
+async def move_task(ctx: Context, id: str, stage_id: int) -> dict:
+    """Mueve una tarea a otra etapa. Usa odoo_validate_apl_stages para conocer stage_ids disponibles."""
+    a = _a(); return await _audited(OC.move_task(a, _odoo, _policy, id, stage_id), 'move_task', a)
+
+@mcp.tool()
+async def close_task(ctx: Context, id: str, evidence: str, done_stage_id: int) -> dict:
+    """Cierra una tarea con evidencia obligatoria (APL 2.0). La evidencia queda en el chatter. done_stage_id es el ID de la etapa Done del flujo APL."""
+    a = _a(); return await _audited(OC.close_task(a, _odoo, _policy, id, evidence, done_stage_id), 'close_task', a)
+
+@mcp.tool()
+async def cancel_task(ctx: Context, id: str, reason: str, cancelled_stage_id: int) -> dict:
+    """Cancela una tarea registrando el motivo en el chatter. cancelled_stage_id es el ID de la etapa Cancelled del flujo APL."""
+    a = _a(); return await _audited(OC.cancel_task(a, _odoo, _policy, id, reason, cancelled_stage_id), 'cancel_task', a)
+
+@mcp.tool()
+async def create_project(ctx: Context, name: str, description: str = None,
+                          user_id: int = None) -> dict:
+    """Crea un proyecto nuevo en Odoo. name obligatorio. description y user_id (responsable) opcionales."""
+    a = _a(); return await _audited(OC.create_project(a, _odoo, _policy, name, description, user_id), 'create_project', a)
+
+@mcp.tool()
+async def create_event(ctx: Context, name: str, start: str, stop: str,
+                        description: str = None, location: str = None,
+                        partner_ids: list = None, allday: bool = False) -> dict:
+    """Crea un evento de calendario. start y stop en ISO (YYYY-MM-DD HH:MM:SS). partner_ids es lista de IDs de res.partner invitados."""
+    a = _a(); return await _audited(OC.create_event(a, _odoo, _policy, name, start, stop, description, location, partner_ids, allday), 'create_event', a)
+
 
 # Aliases BLUE — compatibilidad con conectores que usan nombres originales
 odoo_personal_tasks  = odoo_my_tasks
