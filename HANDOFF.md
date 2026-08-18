@@ -1,8 +1,16 @@
 # HANDOFF — MCP Odoo v2 (Blue/Green)
 
-> Documento operativo para retomar el ticket. **Última actualización:** 12 may 2026 ~20:30 hrs.
+> Documento operativo para retomar el ticket. **Última actualización:** 18 ago 2026 ~14:30 hrs.
 
-## Estado actual (cierre definitivo de jornada 12 may 2026)
+## Estado actual (18 ago 2026 — Fase A "daily driver" aprobada por QA)
+
+- **Ramas vivas:** `rescate/v0.3.5-prod-a-git` (rescató a git el código que vivía SOLO horneado en la imagen `odoo-mcp:multiuser-v0.3.5` de prod — meses de drift prod-vs-git, commit `3f9d55b`) → base de `feature/fase-a-daily-driver` (9 commits, HEAD `72778b3`).
+- **Fase A construida:** G1 mover tarea entre proyectos con auditoría en chatter (`odoo_move_task_to_project`) · G2 contrato de escritura de tareas (alias `deadline`→`date_deadline`, validación agregada, split de `openai_compat.py` 680→5 módulos ≤300 líneas con facade) · G3 `user_ids` escribible con salvaguarda hr.employee activo · G4 Discuss (leer/postear canal con allowlist por policy en `config/policies.yaml`, adjuntos copiar-nunca-mover, límite 10MB) · G5 candado anti-drift (`Dockerfile` ARG `GIT_COMMIT`/`MCP_VERSION`, `odoo_health` los expone, `deploy_green.sh` exige working tree limpio + tag antes de construir).
+- **QA:** 2 auditorías — rechazo con bug real (facade no reexportaba `move_task_to_project`, `AttributeError` en la tool standalone) → fix quirúrgico `72778b3` con test de no-regresión → re-QA aprobado. Suite 68→100 tests (101 colectados, 1 skip `requires_odoo`).
+- **ADRs 011-015** y `docs/architecture.md`/`docs/security.md` ya actualizados por el builder en `docs/adr/`.
+- **Qué falta para deploy:** (1) merge `feature/fase-a-daily-driver` → `main` (release/Infinity) · (2) build y tag `multiuser-v0.4.0` vía `scripts/deploy_green.sh` (exige tree limpio + tag, ADR-015) · (3) `config/policies.yaml` real del VPS con `discuss_channel_allowlist` poblado (Fase A solo trae `[53]` para Willy en el `.example`) · (4) correr `scripts/acceptance_fase_a_live.py --confirm` — mueve en vivo las tareas reales 653/654/655/657 (proyecto 3→12) y corre el deadline de la 655 — commiteado pero NO ejecutado, requiere OK explícito de Willy.
+
+## Estado anterior (cierre definitivo de jornada 12 may 2026)
 
 ### ✅ Todo aplicado en VPS
 - `https://mcp-v2.ovnisystem.com/mcp` — Up (healthy), commit `f7639fe` aplicado.

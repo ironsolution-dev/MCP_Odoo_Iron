@@ -74,6 +74,6 @@ Ver `docs/security.md` para detalle completo.
 - `docs/runbook.md` — deploy, rollback, healthcheck, troubleshooting.
 - `docs/qa-checklist.md` — matriz QA por actor.
 - `docs/APL_STAGES.md` — etapas APL 2.0 reales en Odoo.
-- `docs/adr/` — ADRs 001-010.
+- `docs/adr/` — ADRs 001-015 (011-015: Fase A daily driver, 18-ago-2026).
 - `HANDOFF.md` — estado operativo, pendientes, contacto.
 - `CHANGELOG.md` — cambios versionados.
