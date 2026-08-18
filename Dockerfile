@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Instalar dependencias Python primero (cache layer)
 COPY pyproject.toml ./
 RUN pip install --upgrade pip && pip install \
-    "mcp[cli]>=1.27.0" \
+    "mcp[cli]==1.27.1" \
     "uvicorn>=0.29" \
     "pyyaml>=6.0"
 
