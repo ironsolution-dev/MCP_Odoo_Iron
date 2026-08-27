@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.odoo_client import OdooClient
+from app.odoo_client import OdooClient, extract_write_id
 from app.policy_engine import PolicyEngine
 from app.schemas import ValidationError, validate_iso_date
 from app.token_registry import ActorEntry
@@ -105,7 +105,8 @@ async def odoo_create_crm_activity(actor: ActorEntry, odoo: OdooClient, policy: 
     if note:
         values["note"] = note
 
-    new_id = await odoo.create(actor, "mail.activity", values)
+    raw_result = await odoo.create(actor, "mail.activity", values)
+    new_id = extract_write_id(raw_result, context="odoo_create_crm_activity:create")
     after = await odoo.read(actor, "mail.activity", [new_id],
                             ["id", "summary", "date_deadline", "user_id",
                              "activity_type_id", "res_id"])

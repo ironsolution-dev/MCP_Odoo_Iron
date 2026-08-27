@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.odoo_client import OdooClient
+from app.odoo_client import OdooClient, extract_write_id
 from app.policy_engine import PolicyEngine
 from app.schemas import validate_calendar_event_dates
 from app.token_registry import ActorEntry
@@ -71,7 +71,8 @@ async def odoo_create_calendar_event(actor: ActorEntry, odoo: OdooClient, policy
     if partner_ids:
         values["partner_ids"] = [(6, 0, partner_ids)]
 
-    new_id = await odoo.create(actor, "calendar.event", values)
+    raw_result = await odoo.create(actor, "calendar.event", values)
+    new_id = extract_write_id(raw_result, context="odoo_create_calendar_event:create")
     created = await odoo.read(actor, "calendar.event", [new_id], EVENT_SAFE_FIELDS)
     return created[0] if created else {"id": new_id, "warning": "read-after-write empty"}
 
