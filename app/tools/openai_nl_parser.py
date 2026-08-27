@@ -19,9 +19,10 @@ import re
 from datetime import date, timedelta
 from typing import Any, Optional
 
+from app.apl_description import render_apl_description
+from app.apl_labels import resolve_priority
 from app.odoo_client import OdooClient
 from app.policy_engine import PolicyEngine
-from app.schemas import APL_TITLE_PATTERN
 from app.token_registry import ActorEntry
 
 
@@ -83,9 +84,13 @@ _PRIORITY_RE = re.compile(
     r"\b(?:prioridad|priority|importancia)[:\s]+(p[0-3]|alta|media|baja|normal)\b",
     re.IGNORECASE,
 )
-_PRIORITY_MAP = {
-    "p0": "2", "p1": "2", "p2": "1", "p3": "0",
-    "alta": "2", "media": "1", "normal": "1", "baja": "0",
+# Palabra extraida del NL -> codigo canonico P0-P3. La estrella real sale de
+# app.apl_labels.resolve_priority (fuente unica, ticket 737): antes este
+# modulo tenia su propio dict de estrellas duplicado con el mismo bug de
+# tasks.py (P0 y P1 compartian '2'); ahora solo mapea a P0-P3 y delega.
+_PRIORITY_WORD_TO_CODE = {
+    "p0": "P0", "p1": "P1", "p2": "P2", "p3": "P3",
+    "alta": "P1", "media": "P2", "normal": "P2", "baja": "P3",
 }
 
 # Verbos por accion (para detectar intent).
@@ -127,35 +132,36 @@ _RE_WHOAMI = re.compile(
 # Builders APL 2.0
 # ---------------------------------------------------------------------------
 
-def _build_apl_title(title_core: str, priority: str = "P2",
-                     area: str = "Operaciones", task_type: str = "Ejecucion") -> str:
-    """Si title_core ya cumple APL 2.0, devolverlo. Si no, envolverlo."""
+def _build_apl_title(title_core: str) -> str:
+    """Limpia el titulo extraido del NL. Ticket 737 / ADR-016: el formato
+    nuevo es texto estructural sin prefijos — ya NO se envuelve en
+    `[APL 2.0][Px][Area][Tipo]` (ese formato queda legado, sec 7 de la guia
+    APL 2.0 V2 v1.1). `app.apl_title.normalize_apl_title` sigue aceptando
+    un titulo legado completo si el usuario lo escribio asi."""
     if not title_core:
         return ""
-    cleaned = title_core.strip().strip("\"'“”‘’")
-    if APL_TITLE_PATTERN.match(cleaned):
-        return cleaned
-    return f"[APL 2.0][{priority}][{area}][{task_type}] {cleaned}"
+    return title_core.strip().strip("\"'“”‘’")
 
 
 def _build_apl_description(title_core: str, deadline: str,
                             extra_context: str = "") -> str:
-    """Genera descripcion APL 2.0 con los 8 campos obligatorios.
+    """Genera descripcion APL 2.0 con los 8 campos obligatorios via el
+    escritor unico `app.apl_description.render_apl_description` (ticket 737)
+    en vez de reimplementar el formato.
 
     Usa el titulo como semilla para Objetivo/Entregable y placeholders
     descriptivos para el resto. El usuario puede editar luego."""
     core = (title_core or "tarea").strip()
-    notes = f"\nContexto adicional: {extra_context}" if extra_context else ""
-    return (
-        f"Objetivo: {core}\n"
-        f"Entregable: ejecucion y validacion de '{core}'\n"
-        f"Responsable: actor activo (ver who_am_i)\n"
-        f"Fecha limite: {deadline}\n"
-        f"Criterio de cierre: tarea ejecutada y verificada en sistema\n"
-        f"Evidencia requerida: captura, link o validacion en chatter\n"
-        f"Riesgo si no se cierra: bloqueo de flujo operativo dependiente\n"
-        f"Siguiente accion: validar y reportar al responsable"
-        f"{notes}"
+    return render_apl_description(
+        responsable="actor activo (ver who_am_i)",
+        objetivo=core,
+        entregable=f"ejecucion y validacion de '{core}'",
+        fecha_limite=deadline,
+        criterio_de_cierre="tarea ejecutada y verificada en sistema",
+        evidencia_requerida="captura, link o validacion en chatter",
+        riesgo_si_no_se_cierra="bloqueo de flujo operativo dependiente",
+        siguiente_accion="validar y reportar al responsable",
+        dependencias=extra_context or None,
     )
 
 
@@ -226,10 +232,17 @@ async def _resolve_project_id(query: str, actor: ActorEntry,
 
 
 def _extract_priority_change(query: str) -> Optional[str]:
+    """Extrae la estrella de prioridad (para `update_task`) desde la
+    palabra en el query. Delega el codigo -> estrella a
+    `app.apl_labels.resolve_priority` (fuente unica, ticket 737)."""
     m = _PRIORITY_RE.search(query)
     if not m:
         return None
-    return _PRIORITY_MAP.get(m.group(1).lower())
+    code = _PRIORITY_WORD_TO_CODE.get(m.group(1).lower())
+    if not code:
+        return None
+    _, star = resolve_priority(code)
+    return star
 
 
 def _extract_deadline(query: str, default_iso: str) -> str:
@@ -338,8 +351,7 @@ async def try_parse(query: str, actor: ActorEntry, odoo: OdooClient,
             deadline = _extract_deadline(q, tomorrow)
             return {
                 "action": "create_todo",
-                "title": _build_apl_title(title_core, priority="P2",
-                                          area="Personal", task_type="Test"),
+                "title": _build_apl_title(title_core),
                 "description": _build_apl_description(title_core, deadline),
                 "deadline": deadline,
                 "area": "Personal",
@@ -358,8 +370,7 @@ async def try_parse(query: str, actor: ActorEntry, odoo: OdooClient,
         return {
             "action": "create_task",
             "project_id": pid,
-            "title": _build_apl_title(title_core, priority="P2",
-                                       area="Operaciones", task_type="Ejecucion"),
+            "title": _build_apl_title(title_core),
             "description": _build_apl_description(title_core, deadline),
             "deadline": deadline,
             "area": "Operaciones",
