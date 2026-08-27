@@ -60,7 +60,7 @@ Proyecto 32 = sandbox. Aceptación en vivo real: tarea 808 (título con tildes, 
 `0.4.5` → `deploy_green.sh multiuser-v0.4.4` → `odoo_health` confirma `mcp_version`/`git_commit`
 del tag anterior → redeploy de `multiuser-v0.4.5`. Evidencia en el chatter del ticket 737.
 
-### Deuda conocida (ticket aparte, no resuelta en este cierre)
+### Deuda conocida (ticket Odoo 809, vence 3-sep-2026; no resuelta en este cierre)
 
 El tag de git `multiuser-v0.4.3` (commit `2fa2539`, mensaje "Imagen odoo-mcp:multiuser-v0.4.3
 corriendo en VPS82, rescatada a git 27-ago-2026") **no coincide** con el `MCP_GIT_COMMIT` real
