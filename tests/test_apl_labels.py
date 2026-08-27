@@ -16,6 +16,7 @@ from app.apl_labels import (
     LABELS,
     load_label_map,
     resolve_department,
+    resolve_department_name_for_role,
     resolve_priority,
     resolve_task_type,
 )
@@ -117,6 +118,49 @@ def test_resolve_task_type_vacio():
 
 
 # ---------------------------------------------------------------------------
+# Departamento por rol del actor (ticket 737, hallazgo F2)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("role,expected_name,expected_tag_id", [
+    ("owner", "Gerencia", 20),
+    ("operations", "Operaciones", 14),
+    ("medical_direction", "Staff Profesionales Salud", 8),
+    ("administracion", "Contabilidad/Finanzas", 6),
+    ("hr", "RR.HH", 10),
+    ("commercial", "Comercial", 5),
+    ("tech", "Tecnologia", 9),
+])
+def test_resolve_department_name_for_role_roles_conocidos(role, expected_name, expected_tag_id):
+    """Los 3 roles reales en produccion hoy (owner/operations/
+    medical_direction) y los 4 preparados para actores futuros. El nombre
+    que devuelve DEBE seguir resolviendo a un tag_id real via
+    resolve_department — nunca un nombre huerfano."""
+    name = resolve_department_name_for_role(role)
+    assert name == expected_name
+    tag_id, warning = resolve_department(name)
+    assert tag_id == expected_tag_id
+    assert warning is None
+
+
+def test_resolve_department_name_for_role_desconocido_devuelve_none():
+    assert resolve_department_name_for_role("rol_fantasma") is None
+    assert resolve_department_name_for_role("") is None
+    assert resolve_department_name_for_role(None) is None
+
+
+def test_role_department_tag_ids_no_duplica_fuente_de_ids():
+    """Integridad anti-Frankenstack (regla 3, fuente unica): cada nombre en
+    role_department_tag_ids DEBE existir como clave en department_tag_ids —
+    si alguien renombra un departamento arriba y olvida el mapa de roles,
+    este test lo agarra en vez de dejar un nombre huerfano en produccion."""
+    for role, dept_name in LABELS.role_department_names.items():
+        assert dept_name in LABELS.department_tag_ids, (
+            f"role_department_tag_ids['{role}'] = '{dept_name}' no existe "
+            "en department_tag_ids"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Carga del fichero: fuente unica, override opcional via APL_LABELS_PATH
 # ---------------------------------------------------------------------------
 
@@ -125,6 +169,7 @@ def test_load_label_map_default_coincide_con_labels_global():
     assert reloaded.department_tag_ids == LABELS.department_tag_ids
     assert reloaded.task_type_tag_ids == LABELS.task_type_tag_ids
     assert reloaded.priority_star_codes == LABELS.priority_star_codes
+    assert reloaded.role_department_names == LABELS.role_department_names
 
 
 def test_load_label_map_ids_completos_conocidos():

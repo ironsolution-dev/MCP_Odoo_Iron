@@ -20,7 +20,7 @@ from datetime import date, timedelta
 from typing import Any, Optional
 
 from app.apl_description import render_apl_description
-from app.apl_labels import resolve_priority
+from app.apl_labels import resolve_department_name_for_role, resolve_priority
 from app.odoo_client import OdooClient
 from app.policy_engine import PolicyEngine
 from app.token_registry import ActorEntry
@@ -345,17 +345,30 @@ async def try_parse(query: str, actor: ActorEntry, odoo: OdooClient,
 
     # CREATE TODO (sin proyecto). Importante: orden antes que create_task
     # porque 'todo' es mas especifico.
+    #
+    # Ticket 737, hallazgo F2 (QA ronda 1): antes hardcodeaba area="Personal"
+    # y task_type="Test", ninguno de los dos mapea a una etiqueta canonica de
+    # config/apl_labels.yaml (siempre caia en warning + tag sin asignar).
+    # Decision del PM: task_type fijo "Entregable" (si es un To Do personal,
+    # el tipo por defecto es "algo que hay que entregar"); el departamento ya
+    # NO se inventa — se deriva del ROL del actor via
+    # `resolve_department_name_for_role` (tabla role_department_tag_ids,
+    # ADR-017). Rol sin mapeo -> se pasa el rol crudo como area para que
+    # `resolve_department` (dentro de parse_and_validate_apl_task_input)
+    # genere el warning explicito de "no se asigno etiqueta de departamento"
+    # en vez de crear silenciosamente una tarea sin pista de por que.
     if _RE_CREATE_TODO.search(q):
         title_core = _extract_title_core(q, ("todo", "to-do", "pendiente", "recordatorio"))
         if title_core:
             deadline = _extract_deadline(q, tomorrow)
+            dept_name = resolve_department_name_for_role(actor.role)
             return {
                 "action": "create_todo",
                 "title": _build_apl_title(title_core),
                 "description": _build_apl_description(title_core, deadline),
                 "deadline": deadline,
-                "area": "Personal",
-                "task_type": "Test",
+                "area": dept_name or actor.role or "",
+                "task_type": "Entregable",
                 "priority": "P2",
             }
         return None
@@ -374,7 +387,9 @@ async def try_parse(query: str, actor: ActorEntry, odoo: OdooClient,
             "description": _build_apl_description(title_core, deadline),
             "deadline": deadline,
             "area": "Operaciones",
-            "task_type": "Ejecucion",
+            # Ticket 737, F2: "Ejecucion" no mapea a task_type_tag_ids
+            # (decision del PM: "Entregable", igual que create_todo).
+            "task_type": "Entregable",
             "priority": "P2",
         }
 

@@ -53,6 +53,7 @@ class LabelMap:
     task_type_tag_ids: dict[str, int]
     department_synonyms: dict[str, str]
     task_type_synonyms: dict[str, str]
+    role_department_names: dict[str, str]
     department_lookup: dict[str, int] = field(default_factory=dict)
     task_type_lookup: dict[str, int] = field(default_factory=dict)
 
@@ -73,6 +74,7 @@ def load_label_map(path: Optional[Path] = None) -> LabelMap:
     task_type_tag_ids = raw["task_type_tag_ids"]
     department_synonyms = raw.get("department_synonyms", {})
     task_type_synonyms = raw.get("task_type_synonyms", {})
+    role_department_names = raw.get("role_department_tag_ids", {})
 
     return LabelMap(
         version=raw.get("version", 1),
@@ -82,6 +84,7 @@ def load_label_map(path: Optional[Path] = None) -> LabelMap:
         task_type_tag_ids=task_type_tag_ids,
         department_synonyms=department_synonyms,
         task_type_synonyms=task_type_synonyms,
+        role_department_names=role_department_names,
         department_lookup=_build_lookup(department_tag_ids, department_synonyms),
         task_type_lookup=_build_lookup(task_type_tag_ids, task_type_synonyms),
     )
@@ -125,3 +128,18 @@ def resolve_task_type(task_type: str) -> tuple[Optional[int], Optional[str]]:
             "sinonimo conocido: no se asigno etiqueta de tipo"
         )
     return tag_id, None
+
+
+def resolve_department_name_for_role(role: Optional[str]) -> Optional[str]:
+    """rol del actor (ActorEntry.role) -> nombre CANONICO de departamento,
+    o None si el rol no esta en `role_department_tag_ids` (ticket 737, F2).
+
+    Solo resuelve el NOMBRE — el id lo sigue resolviendo unicamente
+    `resolve_department()` contra `department_tag_ids` (fuente unica de
+    IDs, ADR-017); esta funcion no repite ningun numero. El caller tipico
+    (openai_nl_parser.create_todo) usa el nombre como `area` y deja que
+    `resolve_department` (via `parse_and_validate_apl_task_input`) genere
+    el tag_id + el warning si hiciera falta."""
+    if not role or not role.strip():
+        return None
+    return LABELS.role_department_names.get(role.strip())

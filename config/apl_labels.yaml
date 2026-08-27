@@ -65,3 +65,25 @@ task_type_synonyms:
   Onboarding: Handover
   Analisis: Entregable
   Validacion: Entregable
+
+# Rol del actor (ActorEntry.role, ver config/actors.yaml) -> nombre CANONICO
+# de departamento (ticket 737, hallazgo F2: openai_nl_parser.py hardcodeaba
+# area="Personal" en create_todo, que no mapea a ningun departamento de
+# arriba). El id numerico NO se repite aqui: se resuelve transitivamente
+# contra department_tag_ids via resolve_department_name_for_role() +
+# resolve_department() — una sola fuente de verdad para los IDs (ADR-017).
+#
+# Roles reales en produccion hoy (VPS82, /opt/odoo-mcp-v2/secrets/actors.yaml,
+# verificado 27-ago-2026): owner, operations, medical_direction. Los otros 4
+# (administracion, hr, commercial, tech) quedan listos para cuando existan
+# esos actores; hasta entonces ningun token los usa. Rol sin entrada aqui ->
+# create_todo se crea SIN etiqueta de departamento + warning (nunca crea una
+# etiqueta nueva).
+role_department_tag_ids:
+  owner: Gerencia
+  operations: Operaciones
+  medical_direction: Staff Profesionales Salud
+  administracion: Contabilidad/Finanzas
+  hr: RR.HH
+  commercial: Comercial
+  tech: Tecnologia
