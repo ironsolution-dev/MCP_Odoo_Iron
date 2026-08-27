@@ -52,6 +52,16 @@ límite — riesgo desproporcionado al beneficio para un hallazgo MENOR.
 Deuda declarada: si `tasks.py` gana otra tool de escritura, se revisita
 el split lectura/escritura en un ticket aparte.
 
+### Excepción declarada: `app/tools/openai_nl_parser.py` (ticket 737, QA ronda 2)
+
+`app/tools/openai_nl_parser.py` está en 396 líneas (370 antes del ticket). Creció en la
+ronda 2 al sustituir los valores hardcodeados `area="Personal"`/`task_type="Test"`/
+`"Ejecucion"` por la resolución por rol del actor (`resolve_department_name_for_role`) y
+`task_type="Entregable"`. No se parte en este ciclo para no mezclar dos refactors sobre
+el mismo fichero mientras se despliega el contrato APL 2.0. Deuda declarada con dueño y
+fecha: se parte junto con `app/odoo_mcp_remote.py` (528 líneas, preexistente) en el
+ticket Odoo 803 (vence 11-sep-2026).
+
 ## Estructura de tools
 
 Una función async por tool, prefijo `odoo_`, firma `(actor, odoo, policy, ...kwargs) -> dict`. Registrar en `app/tools/__init__.py` para discovery automático desde `odoo_mcp_remote.py`.
