@@ -16,6 +16,7 @@ Servidor MCP FastMCP que expone Odoo 19 Community a Claude.ai y ChatGPT como con
 - Allowlists estrictas para `hr.employee` y `res.partner`.
 - Audit JSONL con redacción.
 - 9 tools BLUE migradas a actor-aware + nuevos dominios (projects, calendar, employees, crm, partners).
+- Etiquetas APL 2.0 (prioridad/departamento/tipo): `config/apl_labels.yaml` es la **fuente única** de IDs — el MCP asigna, nunca crea (ver ADR-017).
 
 ## Quick start (desarrollo local)
 

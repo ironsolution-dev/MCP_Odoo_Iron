@@ -52,6 +52,18 @@ solo lectura) y confirmar que coinciden. Verificado el 27-ago-2026 (UID 29):
 los 19 IDs de `config/apl_labels.yaml` (4 prioridad + 8 departamento + 7
 tipo) coinciden exactamente con lo leido en produccion.
 
+**Re-verificado 27-ago-2026 12:59 -05 (ronda 2, ticket 737, hallazgo F5 de
+julio-qa):** `project.tags.search_read` en vivo via XML-RPC solo lectura
+(uid 9, credenciales de Willy resueltas en memoria dentro del contenedor
+`odoo-mcp-v2`, nunca impresas). 27 etiquetas totales en Odoo (8 de ruido:
+V1/V2/V3/V/alta/"sorpote ti"/"incidencia de acceeso"/analisis), igual que
+en el pre-flight anterior. Los 19 IDs canonicos siguen exactos:
+prioridad P0=1/P1=2/P2=3/P3=4; departamento Comercial=5/
+Contabilidad-Finanzas=6/Marketing=7/Staff Profesionales Salud=8/
+Tecnologia=9/RR.HH=10/Operaciones=14/Gerencia=20; tipo Recurrente=11/
+Entregable=12/Proyecto=13/Handover=15/Decision=16/Documentacion=25/
+Gestion=27. Sin drift.
+
 ## Consecuencias
 
 - `app/apl_labels.py` (`resolve_priority`, `resolve_department`,
