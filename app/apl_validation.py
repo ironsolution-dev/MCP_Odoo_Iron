@@ -14,6 +14,19 @@ Como `app.apl_title` y `app.apl_labels` ya importaban `ValidationError`
 desde `app.schemas`, moverse a este modulo elimina el import circular que
 antes obligaba a `app.schemas.parse_and_validate_apl_task_input` a hacer
 imports locales (dentro de la funcion) — aqui van arriba, normales.
+
+Ronda 3 (hallazgos D1/D2, tareas 805/806 del sandbox 32): en produccion,
+`validate_apl_description` exigia los encabezados SIN tilde ("fecha
+limite", "siguiente accion") y rechazaba el formato canonico de la guia
+APL 2.0 V2 v1.1 ("📅 Fecha límite", "▶️ Siguiente acción") — el propio
+formato que el servidor le pide al usuario que use. Fix: el chequeo ahora
+pasa por `app.apl_labels.normalize_apl_key` (mismo "accent folding" que ya
+usaban area/task_type — una sola fuente, no una regla nueva por campo) y
+el mensaje de error muestra el nombre CANONICO con tilde (como la guia),
+no una clave interna. Ademas, si la descripcion llega en formato legado
+(sin encabezados emoji) pero con los 8 campos completos, se normaliza al
+formato de la guia antes de validar/guardar via
+`app.apl_description.normalize_apl_description` (D2).
 """
 
 from __future__ import annotations
@@ -21,7 +34,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from app.apl_labels import resolve_department, resolve_priority, resolve_task_type
+from app.apl_description import APL_DESCRIPTION_FIELDS, normalize_apl_description
+from app.apl_labels import normalize_apl_key, resolve_department, resolve_priority, resolve_task_type
 from app.apl_title import normalize_apl_title
 from app.schemas import ValidationError, validate_iso_date
 
@@ -30,20 +44,13 @@ from app.schemas import ValidationError, validate_iso_date
 # APL 2.0 — Tarea
 # ---------------------------------------------------------------------------
 
-# Campos obligatorios en el cuerpo de la tarea (sec 3.5). Sin cambio de
-# logica en el ticket 737: sigue siendo un chequeo de subcadena sin tilde,
-# por eso `app.apl_description.render_apl_description` escribe los
-# encabezados igual (con emoji, sin tilde) para no romper este contrato.
-APL_BODY_REQUIRED_FIELDS = (
-    "objetivo",
-    "entregable",
-    "responsable",
-    "fecha limite",
-    "criterio de cierre",
-    "evidencia requerida",
-    "riesgo si no se cierra",
-    "siguiente accion",
-)
+# Nombres CANONICOS (con tilde, como la guia APL 2.0 V2 v1.1 sec 5) de los 8
+# campos obligatorios en el cuerpo de la tarea. Fuente unica:
+# `app.apl_description.APL_DESCRIPTION_FIELDS` — el mismo listado que usa el
+# escritor `render_apl_description` y el normalizador `normalize_apl_description`.
+# El match contra el texto es via `normalize_apl_key` (sin tilde/mayuscula),
+# asi que un campo se reconoce este con o sin tilde, con o sin emoji.
+APL_BODY_REQUIRED_FIELDS = tuple(label for _field_id, _emoji, label in APL_DESCRIPTION_FIELDS)
 
 
 @dataclass(frozen=True)
@@ -65,8 +72,11 @@ class ParsedAPLTask:
 def validate_apl_description(description: str) -> None:
     if not description or not description.strip():
         raise ValidationError("description vacia")
-    lower = description.lower()
-    missing = [field for field in APL_BODY_REQUIRED_FIELDS if field not in lower]
+    normalized = normalize_apl_key(description)
+    missing = [
+        label for label in APL_BODY_REQUIRED_FIELDS
+        if normalize_apl_key(label) not in normalized
+    ]
     if missing:
         raise ValidationError(
             f"description APL 2.0 incompleta. Faltan campos: {missing}"
@@ -84,9 +94,16 @@ def parse_and_validate_apl_task_input(payload: dict) -> ParsedAPLTask:
     Orquesta, en orden: `app.apl_title.normalize_apl_title` (formato dual
     legado/nuevo, ADR-016) + `app.apl_labels.resolve_priority/
     resolve_department/resolve_task_type` (fuente unica de IDs, ADR-017) +
-    `validate_apl_description` (sin cambio de logica). Nunca crea etiquetas:
-    si `area`/`task_type` no mapea, el tag correspondiente se omite y queda
-    un warning no bloqueante.
+    `validate_apl_description` (ronda 3: tolerante a tilde/mayuscula/emoji,
+    ver docstring del modulo). Nunca crea etiquetas: si `area`/`task_type`
+    no mapea, el tag correspondiente se omite y queda un warning no
+    bloqueante.
+
+    Ronda 3 (hallazgo D2): antes de validar, la descripcion pasa por
+    `app.apl_description.normalize_apl_description` — si viene en formato
+    legado (payload JSON con "Label: valor" sin encabezados emoji) y trae
+    los 8 campos completos, se reescribe al formato de la guia y se agrega
+    un warning no bloqueante; si ya viene en formato emoji, no se toca.
 
     Si el titulo es legado y trae Px/Area/Tipo que difieren del payload,
     manda el titulo (asi lo anoto el PM en el ticket) y se agrega un warning
@@ -97,12 +114,15 @@ def parse_and_validate_apl_task_input(payload: dict) -> ParsedAPLTask:
     if missing:
         raise ValidationError(f"faltan campos APL 2.0: {missing}")
 
-    validate_apl_description(payload["description"])
+    description, description_warning = normalize_apl_description(payload["description"])
+    validate_apl_description(description)
     validate_iso_date(payload["deadline"], field="deadline")
     validate_priority(payload["priority"])
 
     norm_title = normalize_apl_title(payload["title"])
     warnings: list[str] = []
+    if description_warning:
+        warnings.append(description_warning)
     if norm_title.warning:
         warnings.append(norm_title.warning)
 
@@ -145,7 +165,7 @@ def parse_and_validate_apl_task_input(payload: dict) -> ParsedAPLTask:
 
     return ParsedAPLTask(
         title=norm_title.clean_title,
-        description=payload["description"].strip(),
+        description=description,
         deadline=payload["deadline"],
         priority=final_priority,
         priority_star=priority_star,
