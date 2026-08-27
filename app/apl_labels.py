@@ -25,9 +25,16 @@ import yaml
 _DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "apl_labels.yaml"
 
 
-def _normalize_key(value: str) -> str:
+def normalize_apl_key(value: str) -> str:
     """minusculas, sin acentos, espacios colapsados. Usado para matchear
-    nombre canonico o sinonimo sin importar acentos/mayusculas del payload."""
+    nombre canonico o sinonimo sin importar acentos/mayusculas del payload.
+
+    Ticket 737 (ronda 3, hallazgo D1/D2): fuente unica del "accent folding"
+    APL 2.0 — antes solo servia para area/task_type; ahora tambien la
+    reutilizan `app.apl_validation.validate_apl_description` (matchea los
+    encabezados del cuerpo con o sin tilde) y `app.apl_description` (parsea
+    descripciones legado y detecta si ya vienen en formato emoji). Un solo
+    normalizador, no uno por modulo."""
     nfkd = unicodedata.normalize("NFKD", value.strip().lower())
     sin_acentos = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
     return " ".join(sin_acentos.split())
@@ -36,11 +43,11 @@ def _normalize_key(value: str) -> str:
 def _build_lookup(canonical_ids: dict[str, int], synonyms: dict[str, str]) -> dict[str, int]:
     lookup: dict[str, int] = {}
     for name, tag_id in canonical_ids.items():
-        lookup[_normalize_key(name)] = tag_id
+        lookup[normalize_apl_key(name)] = tag_id
     for synonym, canonical_name in synonyms.items():
         tag_id = canonical_ids.get(canonical_name)
         if tag_id is not None:
-            lookup[_normalize_key(synonym)] = tag_id
+            lookup[normalize_apl_key(synonym)] = tag_id
     return lookup
 
 
@@ -108,7 +115,7 @@ def resolve_department(area: str) -> tuple[Optional[int], Optional[str]]:
     el warning explica por que no se asigno etiqueta de departamento."""
     if not area or not area.strip():
         return None, "area vacia: no se asigno etiqueta de departamento"
-    tag_id = LABELS.department_lookup.get(_normalize_key(area))
+    tag_id = LABELS.department_lookup.get(normalize_apl_key(area))
     if tag_id is None:
         return None, (
             f"area '{area}' no mapea a ningun departamento canonico ni "
@@ -121,7 +128,7 @@ def resolve_task_type(task_type: str) -> tuple[Optional[int], Optional[str]]:
     """task_type -> (tag_id, warning). Mismo contrato que resolve_department."""
     if not task_type or not task_type.strip():
         return None, "task_type vacio: no se asigno etiqueta de tipo"
-    tag_id = LABELS.task_type_lookup.get(_normalize_key(task_type))
+    tag_id = LABELS.task_type_lookup.get(normalize_apl_key(task_type))
     if tag_id is None:
         return None, (
             f"task_type '{task_type}' no mapea a ningun tipo canonico ni "
