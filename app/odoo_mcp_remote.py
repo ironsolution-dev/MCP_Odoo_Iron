@@ -205,9 +205,9 @@ mcp = FastMCP(
         "Tu DEBES armar el JSON con todos los campos APL 2.0: title en texto "
         "libre (verbo + entregable + contexto, SIN prefijos ni corchetes), "
         "description con 8 campos con encabezado emoji (👤 Responsable / "
-        "🎯 Objetivo / 📦 Entregable / 📅 Fecha limite / ✅ Criterio de cierre / "
+        "🎯 Objetivo / 📦 Entregable / 📅 Fecha límite / ✅ Criterio de cierre / "
         "📎 Evidencia requerida / ⚠️ Riesgo si no se cierra / ▶️ Siguiente "
-        "accion), deadline (YYYY-MM-DD), area (departamento que EJECUTA: "
+        "acción), deadline (YYYY-MM-DD), area (departamento que EJECUTA: "
         "Comercial/Contabilidad-Finanzas/Marketing/Operaciones/RR.HH/"
         "Tecnologia/Gerencia/Staff Profesionales Salud), task_type "
         "(Entregable/Documentacion/Decision/Proyecto/Handover/Recurrente/"
@@ -463,7 +463,7 @@ async def fetch(ctx: Context, id: str) -> dict:
 async def create_task(ctx: Context, project_id: int, title: str, description: str,
                        deadline: str, area: str, task_type: str,
                        priority: str = "P2") -> dict:
-    """Crea una tarea APL 2.0 dentro de un proyecto. project_id obligatorio. APL 2.0 exige: title (verbo + entregable + contexto, sin corchetes), description con 8 campos emoji (Responsable/Objetivo/Entregable/Fecha limite/Criterio de cierre/Evidencia requerida/Riesgo si no se cierra/Siguiente accion), deadline (YYYY-MM-DD), area (departamento que ejecuta), task_type (tipo de ticket), priority (P0-P3, default P2)."""
+    """Crea una tarea APL 2.0 dentro de un proyecto. project_id obligatorio. APL 2.0 exige: title (verbo + entregable + contexto, sin corchetes), description con 8 campos emoji (Responsable/Objetivo/Entregable/Fecha límite/Criterio de cierre/Evidencia requerida/Riesgo si no se cierra/Siguiente acción), deadline (YYYY-MM-DD), area (departamento que ejecuta), task_type (tipo de ticket), priority (P0-P3, default P2)."""
     a = _a(); return await _audited(OC.create_task(a, _odoo, _policy, project_id, title, description, deadline, area, task_type, priority), 'create_task', a)
 
 @mcp.tool()

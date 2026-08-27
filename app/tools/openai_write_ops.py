@@ -47,8 +47,8 @@ async def create_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
       (el formato legado con prefijos entre corchetes de version anterior
       tambien se acepta y se normaliza automaticamente — ver ADR-016)
     - description: 8 campos con encabezado emoji (Responsable, Objetivo,
-      Entregable, Fecha limite, Criterio de cierre, Evidencia requerida,
-      Riesgo si no se cierra, Siguiente accion)
+      Entregable, Fecha límite, Criterio de cierre, Evidencia requerida,
+      Riesgo si no se cierra, Siguiente acción)
     - deadline: YYYY-MM-DD
     - area: departamento que EJECUTA (ej. "Operaciones", "Tecnologia")
     - task_type: tipo de ticket (ej. "Entregable", "Gestion")

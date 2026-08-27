@@ -94,21 +94,26 @@ def test_apl_title_dual_format_ticket_737():
 
 
 def test_apl_description_must_have_all_fields():
-    """validate_apl_description (sin cambio de logica en el ticket 737):
-    sigue exigiendo los 8 campos por subcadena, con o sin emoji."""
+    """validate_apl_description sigue exigiendo los 8 campos. Ronda 3
+    (ticket 737, hallazgo D1): el mensaje ahora muestra el nombre CANONICO
+    con tilde, como la guia — no una clave interna sin tilde. Cobertura a
+    fondo (tilde/mayuscula/emoji/normalizacion de legado) en
+    tests/test_apl_description.py."""
     with pytest.raises(ValidationError) as exc:
         validate_apl_description(
             "objetivo entregable responsable fecha limite criterio de "
             "cierre evidencia requerida riesgo si no se cierra"
         )
-    assert "siguiente accion" in str(exc.value).lower()
+    msg = str(exc.value)
+    assert "Siguiente acción" in msg
+    assert "siguiente_accion" not in msg
 
-    # Con emoji tambien pasa (mismo chequeo de subcadena, insensible a decoracion).
+    # Con emoji y tilde (formato canonico de la guia) tambien pasa.
     validate_apl_description(
         "🎯 Objetivo: x\n📦 Entregable: x\n👤 Responsable: x\n"
-        "📅 Fecha limite: x\n✅ Criterio de cierre: x\n"
+        "📅 Fecha límite: x\n✅ Criterio de cierre: x\n"
         "📎 Evidencia requerida: x\n⚠️ Riesgo si no se cierra: x\n"
-        "▶️ Siguiente accion: x"
+        "▶️ Siguiente acción: x"
     )
 
 

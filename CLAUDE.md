@@ -62,6 +62,14 @@ el mismo fichero mientras se despliega el contrato APL 2.0. Deuda declarada con 
 fecha: se parte junto con `app/odoo_mcp_remote.py` (528 líneas, preexistente) en el
 ticket Odoo 803 (vence 11-sep-2026).
 
+### Excepción declarada: `tests/test_tasks_apl.py` (ticket 737, QA ronda 3)
+
+`tests/test_tasks_apl.py` está en 368 líneas (363 ya en main antes del ticket). Agrupa el
+contrato completo de creación de tareas APL (título dual, etiquetas, estrellas, descripción)
+y partirlo ahora dispersaría el contrato en varios ficheros mientras el estándar se estabiliza.
+Deuda declarada con dueño y fecha: se parte por dominio (título / etiquetas / descripción)
+dentro del ticket Odoo 803 (vence 11-sep-2026), junto con `odoo_mcp_remote.py`.
+
 ## Estructura de tools
 
 Una función async por tool, prefijo `odoo_`, firma `(actor, odoo, policy, ...kwargs) -> dict`. Registrar en `app/tools/__init__.py` para discovery automático desde `odoo_mcp_remote.py`.
