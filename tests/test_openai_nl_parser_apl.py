@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from app.apl_labels import resolve_department, resolve_task_type
-from app.schemas import parse_and_validate_apl_task_input
+from app.apl_validation import parse_and_validate_apl_task_input
 from app.token_registry import ActorEntry, TokenRegistry
 from app.tools.openai_nl_parser import try_parse
 

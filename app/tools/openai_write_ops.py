@@ -1,7 +1,7 @@
 """Write tools — expuestos con nombres simples para que ChatGPT chat-mode los
 descubra mas alla del patron search/fetch. Cada uno es un wrapper thin sobre
 la tool odoo_* nativa correspondiente. Mantienen APL 2.0 (titulo + 8 campos
-emoji en descripcion, resueltos via app.schemas.parse_and_validate_apl_task_input)
+emoji en descripcion, resueltos via app.apl_validation.parse_and_validate_apl_task_input)
 + read-after-write.
 
 Extraido de openai_compat.py (split mecanico, Fase A daily driver, sec 1).

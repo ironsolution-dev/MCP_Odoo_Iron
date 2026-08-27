@@ -5,15 +5,14 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from app.odoo_client import OdooClient, extract_write_id
-from app.policy_engine import PolicyEngine
-from app.schemas import (
-    ValidationError,
+from app.apl_validation import (
     parse_and_validate_apl_task_input,
     validate_cancel_reason,
     validate_evidence,
-    validate_task_write_payload,
 )
+from app.odoo_client import OdooClient, extract_write_id
+from app.policy_engine import PolicyEngine
+from app.schemas import ValidationError, validate_task_write_payload
 from app.token_registry import ActorEntry
 from app.tools.task_assignment import _validate_assignable_user_ids
 

@@ -7,7 +7,7 @@ reimplementar el formato — una sola fuente de verdad para como se ve una
 descripcion APL 2.0.
 
 Las etiquetas de campo se escriben sin tilde ("Fecha limite", "Siguiente
-accion") a proposito: `app.schemas.validate_apl_description` busca esas
+accion") a proposito: `app.apl_validation.validate_apl_description` busca esas
 mismas subcadenas sin tilde (APL_BODY_REQUIRED_FIELDS) y su logica NO cambia
 en este ticket — la descripcion generada aqui debe seguir pasando esa
 validacion tal cual. El emoji es decorativo y no interfiere con el chequeo.

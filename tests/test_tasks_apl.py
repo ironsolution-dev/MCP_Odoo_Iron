@@ -1,7 +1,8 @@
 """Tests sec 14.1: APL 2.0 obligatorio, evidencia al cerrar, no generic execute.
 
 Ticket 737 cambia el contrato de `validate_apl_task_input` (retirado) por
-`parse_and_validate_apl_task_input` (app/schemas.py): el titulo ahora acepta
+`parse_and_validate_apl_task_input` (app/apl_validation.py, hallazgo F4:
+extraido de app/schemas.py que paso de 300 lineas): el titulo ahora acepta
 formato legado Y nuevo (ADR-016, ya no rechaza texto sin corchetes), y el
 resultado trae tag_ids/priority_star/warnings en vez de solo validar. Los
 tests de esta seccion se actualizan para probar el contrato nuevo; el
@@ -15,13 +16,13 @@ from pathlib import Path
 
 import pytest
 
-from app.policy_engine import PolicyEngine
-from app.schemas import (
-    ValidationError,
+from app.apl_validation import (
     parse_and_validate_apl_task_input,
     validate_apl_description,
     validate_evidence,
 )
+from app.policy_engine import PolicyEngine
+from app.schemas import ValidationError
 from app.token_registry import TokenRegistry
 from app.tools import tasks as tasks_mod
 from app.tools.tasks import (
