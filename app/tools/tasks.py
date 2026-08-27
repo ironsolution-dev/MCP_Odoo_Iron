@@ -9,7 +9,7 @@ from app.odoo_client import OdooClient
 from app.policy_engine import PolicyEngine
 from app.schemas import (
     ValidationError,
-    validate_apl_task_input,
+    parse_and_validate_apl_task_input,
     validate_cancel_reason,
     validate_evidence,
     validate_task_write_payload,
@@ -101,30 +101,46 @@ async def odoo_my_tasks_overdue(actor: ActorEntry, odoo: OdooClient, policy: Pol
 
 async def odoo_create_my_todo_apl(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                                   payload: dict) -> dict:
-    """Crea un To Do personal con APL 2.0 obligatorio. Read-after-write."""
+    """Crea un To Do personal con APL 2.0 obligatorio. Read-after-write.
+
+    Ticket 737: titulo dual legado/nuevo + 3 etiquetas canonicas (prioridad,
+    departamento, tipo) resueltas via `app.apl_labels` (fuente unica de
+    IDs, nunca crea etiquetas) + estrella de prioridad correcta (P0='3',
+    P1='2' — antes ambas quedaban en '2', bug corregido). Warnings no
+    bloqueantes se devuelven en la respuesta.
+    """
     _ensure_policy(policy, actor, "odoo_create_my_todo_apl", "project.task", "create")
-    apl = validate_apl_task_input(payload)
+    apl = parse_and_validate_apl_task_input(payload)
 
     uid = await odoo.authenticate(actor)
     values = {
         "name": apl.title,
         "description": apl.description,
-        "priority": "0" if apl.priority == "P3" else ("1" if apl.priority == "P2" else "2"),
+        "priority": apl.priority_star,
         "date_deadline": apl.deadline,
         "project_id": False,
         "user_ids": [(6, 0, [uid])],
+        "tag_ids": [(6, 0, apl.tag_ids)],
     }
     new_id = await odoo.create(actor, "project.task", values)
     created = await odoo.read(actor, "project.task", [new_id], TASK_SAFE_FIELDS)
-    return created[0] if created else {"id": new_id, "warning": "read-after-write returned empty"}
+    result = created[0] if created else {"id": new_id, "warning": "read-after-write returned empty"}
+    if apl.warnings:
+        result["warnings"] = apl.warnings
+    return result
 
 
 async def odoo_create_project_task_apl(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                                        project_id: int, payload: dict) -> dict:
     """Crea tarea APL 2.0 dentro de un proyecto. El proyecto DEBE ser visible
-    por el actor (Odoo ACL filtra)."""
+    por el actor (Odoo ACL filtra).
+
+    Ticket 737: mismo contrato que `odoo_create_my_todo_apl` — titulo dual,
+    3 etiquetas canonicas via `app.apl_labels`, estrella de prioridad
+    corregida, warnings no bloqueantes en la respuesta.
+    """
     _ensure_policy(policy, actor, "odoo_create_project_task_apl", "project.task", "create")
-    apl = validate_apl_task_input(payload)
+    apl = parse_and_validate_apl_task_input(payload)
 
     # Verifica que el proyecto es visible — si no, Odoo retorna []
     visible = await odoo.search_read(actor, "project.project", [("id", "=", project_id)],
@@ -136,14 +152,18 @@ async def odoo_create_project_task_apl(actor: ActorEntry, odoo: OdooClient, poli
     values = {
         "name": apl.title,
         "description": apl.description,
-        "priority": "0" if apl.priority == "P3" else ("1" if apl.priority == "P2" else "2"),
+        "priority": apl.priority_star,
         "date_deadline": apl.deadline,
         "project_id": project_id,
         "user_ids": [(6, 0, [uid])],
+        "tag_ids": [(6, 0, apl.tag_ids)],
     }
     new_id = await odoo.create(actor, "project.task", values)
     created = await odoo.read(actor, "project.task", [new_id], TASK_SAFE_FIELDS)
-    return created[0] if created else {"id": new_id, "warning": "read-after-write returned empty"}
+    result = created[0] if created else {"id": new_id, "warning": "read-after-write returned empty"}
+    if apl.warnings:
+        result["warnings"] = apl.warnings
+    return result
 
 
 async def odoo_update_task_apl(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
