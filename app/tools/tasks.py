@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from app.odoo_client import OdooClient
+from app.odoo_client import OdooClient, extract_write_id
 from app.policy_engine import PolicyEngine
 from app.schemas import (
     ValidationError,
@@ -114,7 +114,8 @@ async def odoo_create_my_todo_apl(actor: ActorEntry, odoo: OdooClient, policy: P
         "project_id": False,
         "user_ids": [(6, 0, [uid])],
     }
-    new_id = await odoo.create(actor, "project.task", values)
+    raw_result = await odoo.create(actor, "project.task", values)
+    new_id = extract_write_id(raw_result, context="odoo_create_my_todo_apl:create")
     created = await odoo.read(actor, "project.task", [new_id], TASK_SAFE_FIELDS)
     return created[0] if created else {"id": new_id, "warning": "read-after-write returned empty"}
 
@@ -141,7 +142,8 @@ async def odoo_create_project_task_apl(actor: ActorEntry, odoo: OdooClient, poli
         "project_id": project_id,
         "user_ids": [(6, 0, [uid])],
     }
-    new_id = await odoo.create(actor, "project.task", values)
+    raw_result = await odoo.create(actor, "project.task", values)
+    new_id = extract_write_id(raw_result, context="odoo_create_project_task_apl:create")
     created = await odoo.read(actor, "project.task", [new_id], TASK_SAFE_FIELDS)
     return created[0] if created else {"id": new_id, "warning": "read-after-write returned empty"}
 

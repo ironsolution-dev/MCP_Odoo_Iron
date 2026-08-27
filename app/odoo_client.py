@@ -66,6 +66,62 @@ class OdooAccessError(RuntimeError):
     """Odoo ACL denego la operacion."""
 
 
+class OdooWriteResultError(RuntimeError):
+    """No se pudo extraer un id de un resultado de escritura de Odoo.
+
+    Se lanza SIEMPRE que `extract_write_id` no logra normalizar el
+    resultado — nunca se devuelve None en silencio (sec Anti-Frankenstack
+    regla 4: un fallo tiene que verse)."""
+
+
+def extract_write_id(result: Any, *, context: str = "") -> int:
+    """Normaliza a `int` el resultado de una escritura en Odoo.
+
+    Los 4 metodos CRUD estandar (`create`/`write`/`unlink`/`read`) tienen un
+    contrato de retorno fijo y documentado sobre XML-RPC — `create` SIEMPRE
+    devuelve un int. Pero un metodo custom invocado via `OdooClient.call`
+    (ej. `message_post`, `action_done`) devuelve lo que el metodo de Odoo
+    retorne en Python, marshallado por XML-RPC: normalmente un recordset, que
+    llega aca como **lista de ids** (`[302644]`) porque un recordset no se
+    puede serializar tal cual. Segun version/transporte tambien puede llegar
+    como **dict** con clave `id`, o ya como **int**.
+
+    `int(resultado)` directo sobre eso revienta con TypeError DESPUES de que
+    la escritura en Odoo ya ocurrio (el bug real, no cosmetico: el mensaje/
+    registro ya quedo creado, solo el acuse de recibo revienta — un reintento
+    duplica el dato en produccion). Por eso este normalizador cubre los 3
+    casos y, si no puede extraer un id, falla RUIDOSO con un mensaje claro
+    en vez de devolver None o dejar pasar basura.
+    """
+    if isinstance(result, bool):
+        # bool es subclase de int en Python pero nunca es un id valido de Odoo.
+        raise OdooWriteResultError(
+            f"resultado de escritura no es un id valido{_ctx(context)}: {result!r}"
+        )
+    if isinstance(result, int):
+        return result
+    if isinstance(result, (list, tuple)):
+        if not result:
+            raise OdooWriteResultError(
+                f"resultado de escritura vacio{_ctx(context)}: {result!r}"
+            )
+        return extract_write_id(result[0], context=context)
+    if isinstance(result, dict):
+        if "id" not in result:
+            raise OdooWriteResultError(
+                f"resultado de escritura sin clave 'id'{_ctx(context)}: {result!r}"
+            )
+        return extract_write_id(result["id"], context=context)
+    raise OdooWriteResultError(
+        f"no se pudo extraer un id del resultado de escritura{_ctx(context)}: "
+        f"{result!r} (tipo {type(result).__name__})"
+    )
+
+
+def _ctx(context: str) -> str:
+    return f" [{context}]" if context else ""
+
+
 @dataclass
 class _CachedUid:
     uid: int

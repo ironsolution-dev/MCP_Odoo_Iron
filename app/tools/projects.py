@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.odoo_client import OdooClient
+from app.odoo_client import OdooClient, extract_write_id
 from app.policy_engine import PolicyEngine
 from app.token_registry import ActorEntry
 
@@ -52,7 +52,8 @@ async def odoo_create_project(actor: ActorEntry, odoo: OdooClient, policy: Polic
         values["description"] = description
     if user_id:
         values["user_id"] = user_id
-    new_id = await odoo.create(actor, "project.project", values)
+    raw_result = await odoo.create(actor, "project.project", values)
+    new_id = extract_write_id(raw_result, context="odoo_create_project:create")
     created = await odoo.read(actor, "project.project", [new_id], PROJECT_SAFE_FIELDS)
     return created[0] if created else {"id": new_id, "warning": "read-after-write empty"}
 
