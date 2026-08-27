@@ -1,0 +1,67 @@
+# Fuente unica de IDs de etiquetas APL 2.0 (ticket 737, ADR-017).
+# Sin secretos: se hornea en la imagen (Dockerfile COPY config/). Cambio de
+# ID = commit + rebuild + deploy_green.sh, nunca edicion en caliente del
+# contenedor.
+#
+# Pre-flight verificado en vivo contra Odoo Community (project.tags) el
+# 27-ago-2026, UID 29: los 19 IDs listados abajo coinciden exactamente con
+# lo leido en produccion. Releer antes de cada mezcla (sec 2 del diseno).
+version: 1
+
+priority_tag_ids:
+  P0: 1
+  P1: 2
+  P2: 3
+  P3: 4
+
+priority_star_codes:
+  P0: "3"
+  P1: "2"
+  P2: "1"
+  P3: "0"
+
+department_tag_ids:
+  Comercial: 5
+  Contabilidad/Finanzas: 6
+  Marketing: 7
+  Staff Profesionales Salud: 8
+  Tecnologia: 9
+  RR.HH: 10
+  Operaciones: 14
+  Gerencia: 20
+
+task_type_tag_ids:
+  Recurrente: 11
+  Entregable: 12
+  Proyecto: 13
+  Handover: 15
+  Decision: 16
+  Documentacion: 25
+  Gestion: 27
+
+# Sinonimos -> etiqueta canonica (normalizados sin acentos/mayusculas al
+# resolver). NUNCA se crea una etiqueta nueva: si no matchea canonico ni
+# sinonimo, se devuelve warning y el tag se omite (sec 4.4 guia APL 2.0 V2 v1.1).
+department_synonyms:
+  Infra: Tecnologia
+  Cerebro: Tecnologia
+  TI: Tecnologia
+  Datos: Tecnologia
+  Seguridad: Tecnologia
+  Voz: Tecnologia
+  Finanzas: Contabilidad/Finanzas
+  RRHH: RR.HH
+  Legal: Gerencia
+
+task_type_synonyms:
+  Bug: Entregable
+  Deuda: Entregable
+  Mejora: Entregable
+  Feature: Entregable
+  Refactor: Entregable
+  Decision: Decision
+  Seguimiento: Gestion
+  Comunicacion: Gestion
+  Onboarding: Handover
+  Analisis: Entregable
+  Validacion: Entregable
