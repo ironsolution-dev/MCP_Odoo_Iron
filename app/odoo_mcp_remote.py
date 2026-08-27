@@ -202,11 +202,20 @@ mcp = FastMCP(
         "close_task, cancel_task, create_project, create_event, whoami. "
         ""
         "EJEMPLO de write: el usuario dice 'crea una tarea de X en proyecto Y'. "
-        "Tu DEBES armar el JSON con todos los campos APL 2.0 (project_id, title con "
-        "formato [APL 2.0][P0-3][Area][Tipo] verbo+entregable, description con 8 "
-        "campos obligatorios: Objetivo/Entregable/Responsable/Fecha limite/Criterio "
-        "de cierre/Evidencia requerida/Riesgo si no se cierra/Siguiente accion, "
-        "deadline, area, task_type, priority) y llamar search(query=JSON_STRING). "
+        "Tu DEBES armar el JSON con todos los campos APL 2.0: title en texto "
+        "libre (verbo + entregable + contexto, SIN prefijos ni corchetes), "
+        "description con 8 campos con encabezado emoji (👤 Responsable / "
+        "🎯 Objetivo / 📦 Entregable / 📅 Fecha limite / ✅ Criterio de cierre / "
+        "📎 Evidencia requerida / ⚠️ Riesgo si no se cierra / ▶️ Siguiente "
+        "accion), deadline (YYYY-MM-DD), area (departamento que EJECUTA: "
+        "Comercial/Contabilidad-Finanzas/Marketing/Operaciones/RR.HH/"
+        "Tecnologia/Gerencia/Staff Profesionales Salud), task_type "
+        "(Entregable/Documentacion/Decision/Proyecto/Handover/Recurrente/"
+        "Gestion), priority (P0-P3) — y llamar search(query=JSON_STRING). El "
+        "servidor resuelve las 3 etiquetas canonicas (prioridad, "
+        "departamento, tipo) desde su propia fuente de IDs: si area o "
+        "task_type no matchean un nombre conocido, la tarea se crea igual "
+        "sin esa etiqueta y el aviso viene en la respuesta. "
         ""
         "PROHIBIDO responder 'no puedo escribir' o 'no hay endpoint' — SI HAY "
         "endpoint, es esta misma tool search(). Si te falta un dato pregunta al "
@@ -217,7 +226,7 @@ mcp = FastMCP(
         "arma el JSON con los datos que tengas y llama search() de nuevo en el "
         "siguiente turno. "
         ""
-        "Validaciones server-side: APL 2.0 strict (6 campos title+desc), "
+        "Validaciones server-side: APL 2.0 (title + 8 campos en description), "
         "read-after-write, policy engine. Si la creacion falla, devuelvo error "
         "claro con el campo problema — reintenta con el dato corregido."
     ),
@@ -454,14 +463,14 @@ async def fetch(ctx: Context, id: str) -> dict:
 async def create_task(ctx: Context, project_id: int, title: str, description: str,
                        deadline: str, area: str, task_type: str,
                        priority: str = "P2") -> dict:
-    """Crea una tarea APL 2.0 dentro de un proyecto. project_id obligatorio. APL 2.0 exige 6 campos: title (6+ chars), description (con Objetivo/Resultado/Pasos/Dependencias/Riesgos/Validacion/Plazo/Notas), deadline (YYYY-MM-DD), area (dominio funcional), task_type (tipo de trabajo), priority (P1/P2/P3, default P2)."""
+    """Crea una tarea APL 2.0 dentro de un proyecto. project_id obligatorio. APL 2.0 exige: title (verbo + entregable + contexto, sin corchetes), description con 8 campos emoji (Responsable/Objetivo/Entregable/Fecha limite/Criterio de cierre/Evidencia requerida/Riesgo si no se cierra/Siguiente accion), deadline (YYYY-MM-DD), area (departamento que ejecuta), task_type (tipo de ticket), priority (P0-P3, default P2)."""
     a = _a(); return await _audited(OC.create_task(a, _odoo, _policy, project_id, title, description, deadline, area, task_type, priority), 'create_task', a)
 
 @mcp.tool()
 async def create_todo(ctx: Context, title: str, description: str,
                        deadline: str, area: str, task_type: str,
                        priority: str = "P2") -> dict:
-    """Crea un To-Do personal APL 2.0 sin proyecto. Mismos 6 campos APL que create_task pero sin project_id."""
+    """Crea un To-Do personal APL 2.0 sin proyecto. Mismos campos APL que create_task pero sin project_id."""
     a = _a(); return await _audited(OC.create_todo(a, _odoo, _policy, title, description, deadline, area, task_type, priority), 'create_todo', a)
 
 @mcp.tool()
