@@ -20,14 +20,10 @@ class ValidationError(ValueError):
 # APL 2.0 — Tarea
 # ---------------------------------------------------------------------------
 
-# Formato titulo APL 2.0:
-#   [APL 2.0][P0/P1/P2/P3][Area][Tipo] Verbo + entregable + contexto
-APL_TITLE_PATTERN = re.compile(
-    r"^\[APL\s*2\.0\]\[P[0-3]\]\[[^\]]+\]\[[^\]]+\]\s+\S+",
-    re.IGNORECASE,
-)
-
-# Campos obligatorios en el cuerpo de la tarea (sec 3.5).
+# Campos obligatorios en el cuerpo de la tarea (sec 3.5). Sin cambio de
+# logica en el ticket 737: sigue siendo un chequeo de subcadena sin tilde,
+# por eso `app.apl_description.render_apl_description` escribe los
+# encabezados igual (con emoji, sin tilde) para no romper este contrato.
 APL_BODY_REQUIRED_FIELDS = (
     "objetivo",
     "entregable",
@@ -41,23 +37,19 @@ APL_BODY_REQUIRED_FIELDS = (
 
 
 @dataclass(frozen=True)
-class APLTaskInput:
+class ParsedAPLTask:
+    """Resultado de `parse_and_validate_apl_task_input` (ticket 737): titulo
+    ya normalizado (legado o nuevo), prioridad canonica, codigo de estrella
+    listo para Odoo, tag_ids resueltos (sin duplicar, sin None) y warnings
+    no bloqueantes (formato antiguo normalizado, conflicto titulo/payload,
+    area o task_type que no mapeo a ninguna etiqueta)."""
     title: str
     description: str
     deadline: str  # ISO YYYY-MM-DD
-    priority: str  # P0|P1|P2|P3
-    area: str
-    task_type: str
-
-
-def validate_apl_title(title: str) -> None:
-    if not title or not title.strip():
-        raise ValidationError("title vacio")
-    if not APL_TITLE_PATTERN.match(title.strip()):
-        raise ValidationError(
-            "title no cumple formato APL 2.0. Formato: "
-            "[APL 2.0][P0/P1/P2/P3][Area][Tipo] Verbo + entregable + contexto"
-        )
+    priority: str  # P0|P1|P2|P3 canonico, ya resuelto de titulo o payload
+    priority_star: str  # "0".."3", listo para el campo priority de Odoo
+    tag_ids: list[int]
+    warnings: list[str]
 
 
 def validate_apl_description(description: str) -> None:
@@ -81,26 +73,85 @@ def validate_priority(value: str) -> None:
         raise ValidationError(f"priority debe ser P0|P1|P2|P3; recibido: {value!r}")
 
 
-def validate_apl_task_input(payload: dict) -> APLTaskInput:
-    """Valida un payload completo de creacion de tarea APL 2.0.
-    Levanta ValidationError con todos los problemas encontrados."""
+def parse_and_validate_apl_task_input(payload: dict) -> ParsedAPLTask:
+    """Valida y normaliza un payload de creacion de tarea APL 2.0 (ticket 737).
+
+    Orquesta, en orden: `app.apl_title.normalize_apl_title` (formato dual
+    legado/nuevo, ADR-016) + `app.apl_labels.resolve_priority/
+    resolve_department/resolve_task_type` (fuente unica de IDs, ADR-017) +
+    `validate_apl_description` (sin cambio de logica). Nunca crea etiquetas:
+    si `area`/`task_type` no mapea, el tag correspondiente se omite y queda
+    un warning no bloqueante.
+
+    Si el titulo es legado y trae Px/Area/Tipo que difieren del payload,
+    manda el titulo (asi lo anoto el PM en el ticket) y se agrega un warning
+    de conflicto por cada campo distinto.
+
+    Import local de `app.apl_title`/`app.apl_labels` para evitar import
+    circular: ambos modulos importan `ValidationError` de aqui.
+    """
+    from app.apl_labels import resolve_department, resolve_priority, resolve_task_type
+    from app.apl_title import normalize_apl_title
+
     required = ["title", "description", "deadline", "priority", "area", "task_type"]
     missing = [k for k in required if not payload.get(k)]
     if missing:
         raise ValidationError(f"faltan campos APL 2.0: {missing}")
 
-    validate_apl_title(payload["title"])
     validate_apl_description(payload["description"])
     validate_iso_date(payload["deadline"], field="deadline")
     validate_priority(payload["priority"])
 
-    return APLTaskInput(
-        title=payload["title"].strip(),
+    norm_title = normalize_apl_title(payload["title"])
+    warnings: list[str] = []
+    if norm_title.warning:
+        warnings.append(norm_title.warning)
+
+    final_priority = str(payload["priority"]).strip().upper()
+    final_area = str(payload["area"]).strip()
+    final_task_type = str(payload["task_type"]).strip()
+
+    if norm_title.is_legacy:
+        if norm_title.priority and norm_title.priority != final_priority:
+            warnings.append(
+                f"conflicto de prioridad: titulo legado trae {norm_title.priority}, "
+                f"payload trae {final_priority}; manda el titulo"
+            )
+            final_priority = norm_title.priority
+        if norm_title.area and norm_title.area != final_area:
+            warnings.append(
+                f"conflicto de area: titulo legado trae '{norm_title.area}', "
+                f"payload trae '{final_area}'; manda el titulo"
+            )
+            final_area = norm_title.area
+        if norm_title.task_type and norm_title.task_type != final_task_type:
+            warnings.append(
+                f"conflicto de task_type: titulo legado trae '{norm_title.task_type}', "
+                f"payload trae '{final_task_type}'; manda el titulo"
+            )
+            final_task_type = norm_title.task_type
+
+    validate_priority(final_priority)
+    priority_tag_id, priority_star = resolve_priority(final_priority)
+
+    dept_tag_id, dept_warning = resolve_department(final_area)
+    if dept_warning:
+        warnings.append(dept_warning)
+
+    type_tag_id, type_warning = resolve_task_type(final_task_type)
+    if type_warning:
+        warnings.append(type_warning)
+
+    tag_ids = [tid for tid in (priority_tag_id, dept_tag_id, type_tag_id) if tid is not None]
+
+    return ParsedAPLTask(
+        title=norm_title.clean_title,
         description=payload["description"].strip(),
         deadline=payload["deadline"],
-        priority=payload["priority"],
-        area=str(payload["area"]).strip(),
-        task_type=str(payload["task_type"]).strip(),
+        priority=final_priority,
+        priority_star=priority_star,
+        tag_ids=tag_ids,
+        warnings=warnings,
     )
 
 
