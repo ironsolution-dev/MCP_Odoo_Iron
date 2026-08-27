@@ -102,8 +102,8 @@ def _help_write_response() -> dict:
         "8 campos con encabezado emoji):\n"
         '{"action":"create_task","project_id":<int>,"title":"verbo + entregable + '
         'contexto","description":"👤 Responsable: ...\\n🎯 Objetivo: ...\\n📦 Entregable: '
-        '...\\n📅 Fecha limite: YYYY-MM-DD\\n✅ Criterio de cierre: ...\\n📎 Evidencia '
-        'requerida: ...\\n⚠️ Riesgo si no se cierra: ...\\n▶️ Siguiente accion: ...",'
+        '...\\n📅 Fecha límite: YYYY-MM-DD\\n✅ Criterio de cierre: ...\\n📎 Evidencia '
+        'requerida: ...\\n⚠️ Riesgo si no se cierra: ...\\n▶️ Siguiente acción: ...",'
         '"deadline":"YYYY-MM-DD","area":"<Operaciones|Comercial|Tecnologia|'
         'Contabilidad/Finanzas|Marketing|RR.HH|Gerencia|Staff Profesionales Salud>",'
         '"task_type":"<Entregable|Documentacion|Decision|Proyecto|Handover|Recurrente|Gestion>",'
