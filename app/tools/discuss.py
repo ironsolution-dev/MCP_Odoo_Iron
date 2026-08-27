@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.odoo_client import OdooClient
+from app.odoo_client import OdooClient, extract_write_id
 from app.policy_engine import PolicyEngine
 from app.schemas import ValidationError
 from app.token_registry import ActorEntry
@@ -66,15 +66,25 @@ async def odoo_read_discuss_channel(actor: ActorEntry, odoo: OdooClient, policy:
 async def odoo_post_discuss_message(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                                     channel_id: int, body: str) -> dict:
     """Posta un mensaje de texto plano en un canal de Discuss allowlisted.
-    El id que retorna `message_post` se usa para el read-after-write."""
+    El id que retorna `message_post` se usa para el read-after-write.
+
+    OJO: `message_post` NO es create/write — es un metodo custom, y su
+    retorno via XML-RPC llega como lista de ids (`[302644]`), no como int
+    (a diferencia de `odoo.create`). `int()` directo sobre eso revienta
+    DESPUES de que el mensaje ya quedo posteado en Odoo: el falso negativo
+    mas caro que hay, porque el reflejo de reintentar duplica el mensaje.
+    `extract_write_id` normaliza list/dict/int de forma unica (sec G4,
+    incidente 20-ago-2026: 3 TypeError en produccion, mensaje entregado
+    las 3 veces)."""
     _ensure_policy(policy, actor, "odoo_post_discuss_message", "mail.message", "create")
     _ensure_channel_allowed(policy, actor, channel_id)
     if not body or not body.strip():
         raise ValidationError("body vacio")
 
-    new_id = await odoo.call(actor, "discuss.channel", "message_post", [[channel_id]],
-                             {"body": body.strip(), "message_type": "comment"})
-    after = await odoo.read(actor, "mail.message", [int(new_id)], DISCUSS_MESSAGE_SAFE_FIELDS)
+    raw_result = await odoo.call(actor, "discuss.channel", "message_post", [[channel_id]],
+                                 {"body": body.strip(), "message_type": "comment"})
+    new_id = extract_write_id(raw_result, context="odoo_post_discuss_message:message_post")
+    after = await odoo.read(actor, "mail.message", [new_id], DISCUSS_MESSAGE_SAFE_FIELDS)
     return after[0] if after else {"id": new_id, "warning": "read-after-write returned empty"}
 
 
@@ -139,13 +149,14 @@ async def odoo_attach_discuss_attachment_to_task(actor: ActorEntry, odoo: OdooCl
     if not full:
         raise PermissionError(f"attachment_not_accessible:{attachment_id}")
 
-    new_id = await odoo.create(actor, "ir.attachment", {
+    raw_result = await odoo.create(actor, "ir.attachment", {
         "name": info.get("name") or f"adjunto_{attachment_id}",
         "mimetype": info.get("mimetype"),
         "datas": full[0].get("datas"),
         "res_model": "project.task",
         "res_id": task_id,
     })
+    new_id = extract_write_id(raw_result, context="odoo_attach_discuss_attachment_to_task:create")
     after = await odoo.read(actor, "ir.attachment", [new_id], ATTACHMENT_META_FIELDS)
     return {
         "attachment": after[0] if after else {"id": new_id},

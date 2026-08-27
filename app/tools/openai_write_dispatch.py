@@ -98,14 +98,23 @@ def _help_write_response() -> dict:
         "preguntale al usuario por el dato faltante. NO inventes valores ni digas "
         "que la herramienta no existe.\n\n"
         "FORMATOS JSON action soportados (envia uno por llamada a search):\n\n"
-        "Crear tarea en proyecto (APL 2.0 — 6 campos obligatorios):\n"
-        '{"action":"create_task","project_id":<int>,"title":"[APL 2.0][P0-3][Area][Tipo] '
-        'verbo + entregable","description":"Objetivo: ...\\nEntregable: ...\\nResponsable: '
-        '...\\nFecha limite: YYYY-MM-DD\\nCriterio de cierre: ...\\nEvidencia requerida: '
-        '...\\nRiesgo si no se cierra: ...\\nSiguiente accion: ...","deadline":"YYYY-MM-DD",'
-        '"area":"<Operaciones|TI|Comercial|...>","task_type":"<Test|Ejecucion|Revision|...>","priority":"P2"}\n\n'
-        "Crear To-Do personal (sin proyecto):\n"
-        '{"action":"create_todo","title":"[APL 2.0][P2][...][...] ...","description":"...","deadline":"...","area":"...","task_type":"...","priority":"P2"}\n\n'
+        "Crear tarea en proyecto (APL 2.0 — title sin corchetes + description con "
+        "8 campos con encabezado emoji):\n"
+        '{"action":"create_task","project_id":<int>,"title":"verbo + entregable + '
+        'contexto","description":"👤 Responsable: ...\\n🎯 Objetivo: ...\\n📦 Entregable: '
+        '...\\n📅 Fecha limite: YYYY-MM-DD\\n✅ Criterio de cierre: ...\\n📎 Evidencia '
+        'requerida: ...\\n⚠️ Riesgo si no se cierra: ...\\n▶️ Siguiente accion: ...",'
+        '"deadline":"YYYY-MM-DD","area":"<Operaciones|Comercial|Tecnologia|'
+        'Contabilidad/Finanzas|Marketing|RR.HH|Gerencia|Staff Profesionales Salud>",'
+        '"task_type":"<Entregable|Documentacion|Decision|Proyecto|Handover|Recurrente|Gestion>",'
+        '"priority":"P2"}\n\n'
+        "Crear To-Do personal (sin proyecto, mismos campos que create_task):\n"
+        '{"action":"create_todo","title":"verbo + entregable + contexto","description":"...","deadline":"...","area":"...","task_type":"...","priority":"P2"}\n\n'
+        "Nota: si area o task_type no coinciden con ninguna etiqueta canonica "
+        "conocida, la tarea se crea igual sin esa etiqueta y el servidor avisa "
+        "en la respuesta (nunca crea etiquetas nuevas). El formato de titulo "
+        "con prefijos entre corchetes de version anterior sigue aceptandose "
+        "y se normaliza automaticamente.\n\n"
         "Actualizar campos de tarea (acepta alias deadline->date_deadline; "
         "NO enviar los dos a la vez; project_id NO va aqui, usa move_task_to_project):\n"
         '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"...","deadline":"YYYY-MM-DD"}}\n\n'

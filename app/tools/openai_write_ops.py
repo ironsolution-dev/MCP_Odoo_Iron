@@ -1,7 +1,8 @@
 """Write tools — expuestos con nombres simples para que ChatGPT chat-mode los
 descubra mas alla del patron search/fetch. Cada uno es un wrapper thin sobre
 la tool odoo_* nativa correspondiente. Mantienen APL 2.0 (titulo + 8 campos
-en descripcion) + read-after-write.
+emoji en descripcion, resueltos via app.apl_validation.parse_and_validate_apl_task_input)
++ read-after-write.
 
 Extraido de openai_compat.py (split mecanico, Fase A daily driver, sec 1).
 Sin logica nueva. Consumido por openai_write_dispatch.py (protocolo JSON
@@ -41,17 +42,23 @@ async def create_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                       priority: str = "P2") -> dict:
     """Crea una tarea APL 2.0 dentro de un proyecto.
 
-    APL 2.0 exige 6 campos obligatorios:
-    - title: titulo estructurado (6+ chars)
-    - description: descripcion con 8 campos clave (Objetivo, Resultado, Pasos,
-      Dependencias, Riesgos, Validacion, Plazo, Notas)
+    APL 2.0 exige:
+    - title: verbo + entregable + contexto, sin corchetes ni prefijos
+      (el formato legado con prefijos entre corchetes de version anterior
+      tambien se acepta y se normaliza automaticamente — ver ADR-016)
+    - description: 8 campos con encabezado emoji (Responsable, Objetivo,
+      Entregable, Fecha limite, Criterio de cierre, Evidencia requerida,
+      Riesgo si no se cierra, Siguiente accion)
     - deadline: YYYY-MM-DD
-    - area: dominio funcional (ej. "Operaciones", "TI")
-    - task_type: tipo de trabajo (ej. "ejecucion", "revision")
-    - priority: P1/P2/P3 (default P2)
+    - area: departamento que EJECUTA (ej. "Operaciones", "Tecnologia")
+    - task_type: tipo de ticket (ej. "Entregable", "Gestion")
+    - priority: P0/P1/P2/P3 (default P2)
 
-    Si el titulo o la descripcion no cumplen APL 2.0, retorna error con
-    detalles para que el LLM corrija el payload.
+    Las 3 etiquetas canonicas (prioridad, departamento, tipo) se resuelven
+    desde `app.apl_labels` (fuente unica de IDs); si area/task_type no
+    matchea ningun nombre conocido, la tarea se crea sin esa etiqueta y el
+    aviso viaja en la respuesta. Si el titulo o la descripcion no cumplen
+    APL 2.0, retorna error con detalles para que el LLM corrija el payload.
     """
     payload = {
         "title": title, "description": description,
@@ -70,7 +77,7 @@ async def create_todo(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
                       priority: str = "P2") -> dict:
     """Crea un To-Do personal APL 2.0 (sin proyecto asignado).
 
-    Mismos 6 campos obligatorios que `create_task` pero sin project_id.
+    Mismos campos obligatorios que `create_task` pero sin project_id.
     """
     payload = {
         "title": title, "description": description,

@@ -28,8 +28,11 @@ RUN pip install --upgrade pip && pip install \
     "uvicorn>=0.29" \
     "pyyaml>=6.0"
 
-# Copiar codigo
+# Copiar codigo. config/ incluye apl_labels.yaml (ticket 737, ADR-017):
+# fuente unica de IDs de etiquetas APL 2.0, sin secretos, horneada en la
+# imagen. Cambio de ID = commit + rebuild, nunca edicion en caliente.
 COPY app/ ./app/
+COPY config/ ./config/
 COPY scripts/ ./scripts/
 
 # Usuario no-root

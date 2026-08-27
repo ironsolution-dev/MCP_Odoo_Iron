@@ -16,6 +16,7 @@ Servidor MCP FastMCP que expone Odoo 19 Community a Claude.ai y ChatGPT como con
 - Allowlists estrictas para `hr.employee` y `res.partner`.
 - Audit JSONL con redacción.
 - 9 tools BLUE migradas a actor-aware + nuevos dominios (projects, calendar, employees, crm, partners).
+- Etiquetas APL 2.0 (prioridad/departamento/tipo): `config/apl_labels.yaml` es la **fuente única** de IDs — el MCP asigna, nunca crea (ver ADR-017).
 
 ## Quick start (desarrollo local)
 
@@ -74,6 +75,6 @@ Ver `docs/security.md` para detalle completo.
 - `docs/runbook.md` — deploy, rollback, healthcheck, troubleshooting.
 - `docs/qa-checklist.md` — matriz QA por actor.
 - `docs/APL_STAGES.md` — etapas APL 2.0 reales en Odoo.
-- `docs/adr/` — ADRs 001-015 (011-015: Fase A daily driver, 18-ago-2026).
+- `docs/adr/` — ADRs 001-015 (011-015: Fase A daily driver, 18-ago-2026); 016-017: ticket 737 — alineacion con la guia APL 2.0 V2 v1.1 (titulo dual legado/nuevo, fuente unica de IDs de etiquetas), 27-ago-2026.
 - `HANDOFF.md` — estado operativo, pendientes, contacto.
 - `CHANGELOG.md` — cambios versionados.
