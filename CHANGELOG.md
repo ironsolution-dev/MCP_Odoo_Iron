@@ -2,6 +2,78 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+> Nota: entre `0.2.0` (12-may-2026) y `0.4.5` (27-ago-2026) el repo tageó `multiuser-v0.3.5` a
+> `multiuser-v0.4.4` sin entrada aquí — historial real en `git log`/`git tag` y en `HANDOFF.md`
+> (Fase A "daily driver", 18-ago-2026). Este changelog retoma desde `0.4.5`.
+
+## [0.4.5] — 2026-08-27 (ticket Odoo 737 — MCP alineado con la Guía APL 2.0 V2 v1.1)
+
+Cierre de 3 rondas de QA (`julio-qa`) sobre `feature/ticket-737-apl-v11` → `main`, commit `9ff29cf`.
+Desplegado en producción (`mcp-v2.ovnisystem.com`, VPS82) tras aceptación en vivo.
+
+### Added
+
+- `app/apl_title.py` — `normalize_apl_title()`: título legado `[APL 2.0][Px][Área][Tipo] …` se
+  normaliza a verbo + entregable (formato de la guía humana); título nuevo valida estructura.
+  Insensible a tildes/mayúsculas desde la ronda 3 (D1).
+- `app/apl_labels.py` — fuente única de IDs de etiquetas (`config/apl_labels.yaml`, horneado en
+  la imagen): resuelve prioridad→estrella y departamento/tipo→`tag_id`; **nunca crea** etiquetas
+  en Odoo (ADR-017).
+- `app/apl_description.py` — `render_apl_description()`: escritor único de la descripción de
+  ocho campos con encabezados emoji 👤🎯📦📅✅📎⚠️▶️; normaliza descripción legado (sin
+  encabezados/emoji) al formato de la guía (D2, ronda 3).
+- `app/apl_validation.py` — validadores APL 2.0 extraídos de `app/schemas.py` (que superaba 300
+  líneas).
+- `config/apl_labels.yaml` — mapa canónico de prioridad/departamento/tipo con sinónimos.
+- ADR-016 (título dual legado/nuevo) y ADR-017 (etiquetas: fuente única versionada en la imagen).
+- 167 tests (`pytest tests/ -v`, verde). Incluye tildes/mayúscula/emoji y normalización
+  legado→guía (ronda 3).
+
+### Fixed
+
+- **Estrellas de prioridad:** `app/tools/tasks.py` asignaba la misma estrella a P0 y P1
+  (`"0" if P3 else ("1" if P2 else "2")`). Corregido a P0→3, P1→2, P2→1, P3→0.
+- Ninguna tool de escritura asignaba `tag_ids` al crear tarea/todo — ahora escribe las 3
+  etiquetas canónicas (`[(6,0,tag_ids)]`).
+- System prompt, help de escritura (`_help_write_response`) y docstrings de
+  `openai_write_ops.py`/`openai_nl_parser.py` describían un formato que ya no exigía el
+  validador (6 campos sin emoji, o campos inventados «Resultado/Pasos/…») — reescritos para
+  coincidir con el contrato real.
+- Drift de producción rescatado a git: el contenedor en VPS82 corría
+  `odoo-mcp:multiuser-v0.4.3` (`MCP_GIT_COMMIT=c48b283…`) que no existía en ningún commit de
+  `main`. Extraído del contenedor, comparado por sha256 y traído a git (tag `multiuser-v0.4.3`
+  ahora apunta al commit `2fa2539`, distinto del hash real horneado en la imagen que corrió en
+  prod — ver "Deuda conocida" abajo).
+
+### Cómo validar
+
+```text
+odoo_create_project_task_apl(project_id=32, title="[APL 2.0][P1][Tecnología][Entregable] Validación con tildes", ...)
+```
+Proyecto 32 = sandbox. Aceptación en vivo real: tarea 808 (título con tildes, `tag_ids={2,9,12}`,
+`priority=2`), cancelada tras validar; evidencia en el chatter del ticket Odoo 737 (mensajes
+317703 y 317707).
+
+### Rollback probado
+
+`deploy_green.sh` con el tag anterior (`multiuser-v0.4.4`) → `docker stop/rm` del contenedor
+`0.4.5` → `deploy_green.sh multiuser-v0.4.4` → `odoo_health` confirma `mcp_version`/`git_commit`
+del tag anterior → redeploy de `multiuser-v0.4.5`. Evidencia en el chatter del ticket 737.
+
+### Deuda conocida (ticket Odoo 809, vence 3-sep-2026; no resuelta en este cierre)
+
+El tag de git `multiuser-v0.4.3` (commit `2fa2539`, mensaje "Imagen odoo-mcp:multiuser-v0.4.3
+corriendo en VPS82, rescatada a git 27-ago-2026") **no coincide** con el `MCP_GIT_COMMIT` real
+horneado en la imagen que corrió en producción (`c48b283…`, que nunca existió en git — era un
+build a mano fuera de `deploy_green.sh`). El rescate reconstruyó el código correcto, pero el tag
+histórico `multiuser-v0.4.3` en el repo no es bit-a-bit trazable al build que realmente corrió.
+No bloquea nada hoy (v0.4.3 quedó superado por v0.4.4/v0.4.5), pero rompe la garantía de
+trazabilidad build↔git de ADR-015 para esa versión puntual. Pendiente: ticket para
+re-documentar/retaguear `multiuser-v0.4.3` como "reconstruido, no bit-exacto" o retirarlo del
+listado de tags válidos — dueño y fecha a definir por `julio-triage`.
+
+---
+
 ## [0.2.0] — 2026-05-12 (deploy en produccion + QA parcial Willy/Claude.ai)
 
 ### Fixed
