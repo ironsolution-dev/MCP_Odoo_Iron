@@ -217,3 +217,9 @@ def env_actors(monkeypatch):
     monkeypatch.setenv("ODOO_API_KEY_YUNIESKY", "yuniesky_api_key_fake")
     monkeypatch.setenv("ODOO_USERNAME_ANET", "anet@test")
     monkeypatch.setenv("ODOO_API_KEY_ANET", "anet_api_key_fake")
+
+
+# Fixtures del servidor MCP real (socket real, session-scoped) usadas por
+# los tests de ticket 807 — separadas en tests/fixtures_mcp_live.py para no
+# pasar las 300 lineas/archivo de este conftest (ver CLAUDE.md del repo).
+pytest_plugins = ["tests.fixtures_mcp_live"]
