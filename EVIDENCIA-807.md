@@ -45,9 +45,11 @@ Base: `main` @ `d5a798b` (punta antes de esta rama).
    el hueco de seguridad.
 4. **ADR-021 (CORS en la app)**: `OPTIONS /mcp/*` responde 2xx sin exigir
    token (el preflight del navegador no manda `Authorization`) con
-   `Access-Control-Allow-Origin/Methods/Headers` acotados a lo que el
-   protocolo MCP usa. Las respuestas reales (GET/POST) también llevan
-   `Access-Control-Allow-Origin` reflejando el `Origin` del request.
+   `Access-Control-Allow-Methods/Headers` **acotados** a lo que el
+   protocolo MCP usa — `Access-Control-Allow-Origin` NO está acotado:
+   refleja cualquier `Origin` del request, sin allowlist, en el preflight
+   y en las respuestas reales (GET/POST). Riesgo aceptado temporalmente,
+   remediación en ticket APL 867 (allowlist de orígenes) — ver ADR-021.
 5. **Causa de proceso (client_type solo en fallos)**: `BearerMiddleware`
    guarda `(client_type, user_agent)` en un `ContextVar` propio
    (`_client_info`) además del actor; `_audited()` lo adjunta a **todos**
@@ -176,10 +178,15 @@ sha256 que usa `TokenRegistry`, nunca los reales de `.creds`/vault.
 ## Pendientes / limitaciones conocidas
 
 - **No incluido (fuera de alcance por diseño):** OAuth completo,
-  endpoints `/.well-known/*`, consolidación del pipeline de auth
+  endpoints `/.well-known/*` (ADR-019). Consolidación del pipeline de auth
   "fantasma" en `AuthMiddleware.authenticate()`/`authorize_tool()` (sigue
-  sin usarse desde el path vivo — mismo estado que antes de este ticket,
-  ticket aparte).
+  sin usarse desde el path vivo — mismo estado que antes de este ticket):
+  declarado como deuda en ticket Odoo 864 (ver ADR-018).
+- **CORS sin allowlist de orígenes (ADR-021):** `Access-Control-Allow-Origin`
+  refleja cualquier `Origin`, sin comparar contra una lista permitida.
+  Riesgo aceptado temporalmente porque hoy ningún cliente real llama desde
+  navegador; remediación en ticket Odoo APL 867, debe cerrarse ANTES de
+  servir un cliente MCP de navegador.
 - **Deuda preexistente que este ticket no resuelve:** `app/odoo_mcp_remote.py`
   ya estaba declarado sobre el límite de 300 líneas/archivo (528 líneas,
   ticket Odoo 803, vence 11-sep-2026). Los cambios de este ticket lo
@@ -189,8 +196,8 @@ sha256 que usa `TokenRegistry`, nunca los reales de `.creds`/vault.
 - **Rate limit de las fixtures de test** (`600 req/min`) es artificialmente
   alto porque una sola sesión de servidor sirve a ~15 tests; no es un
   valor de producción, no toca `config/policies.yaml.example`.
-- **`docs/adr/ADR-018.md` a `ADR-022.md` no existen todavía** — corresponde
-  a `julio-docs` después de QA, según el mandato de este ticket.
+- **`docs/adr/ADR-018.md` a `ADR-022.md`** redactados por `julio-docs` tras
+  QA, según el mandato de este ticket — ver `docs/adr/`.
 
 ## Cómo probarlo (para julio-qa)
 
