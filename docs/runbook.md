@@ -183,6 +183,35 @@ Restaura desde último snapshot en `/opt/odoo-mcp-v2/backups/`.
 
 ---
 
+## 7.1 Rollback de código (ticket 807 — auth GET/POST unificada + CORS + discovery)
+
+Si el cambio del ticket 807 (unificación de auth GET/POST, discovery GET,
+`WWW-Authenticate`, CORS, `client_type`/`user_agent` en el audit) causa un
+problema en GREEN, el rollback es de código, no de datos: volver al sha/tag
+anterior (`main` antes de la rama `julio/807-mcp-agnostico`, o el tag
+`multiuser-v0.4.5` si ya se re-taggeó y desplegó tras este ticket) y
+redesplegar GREEN con `scripts/deploy_green.sh` apuntando a ese ref.
+
+Antes de redesplegar, **probar en local** que el sha/tag anterior arranca y
+responde igual que antes — no asumirlo:
+
+```bash
+python scripts/rollback_check_local.py main      # o el tag: multiuser-v0.4.5
+```
+
+Crea un `git worktree` aparte en ese ref, levanta el servidor MCP ahí con
+actores/policies de prueba (nunca Odoo real), hace `POST /mcp/<token>
+tools/list` (espera 200 + N tools) y `POST /mcp/<token-inválido>` (espera
+401), y borra el worktree al terminar. No toca el árbol de trabajo actual
+ni VPS82. Probado el 31-ago-2026 contra `main` (sha `d5a798b`): `200` con
+49 tools y `401` — ver `EVIDENCIA-807.md`.
+
+Si el smoke test pasa, seguir con el rollback real de GREEN (contenedor):
+igual que la sección 6, pero re-buildeando la imagen desde el sha/tag
+anterior antes de `docker run`.
+
+---
+
 ## 8. Rotación de token MCP
 
 1. Generar nuevo token: `python scripts/generate_mcp_token.py --actor <actor>`.

@@ -6,6 +6,60 @@ Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 > `multiuser-v0.4.4` sin entrada aquí — historial real en `git log`/`git tag` y en `HANDOFF.md`
 > (Fase A "daily driver", 18-ago-2026). Este changelog retoma desde `0.4.5`.
 
+## [Unreleased] — ticket Odoo 807 (conector MCP agnóstico de LLM, retrocompat)
+
+Rama `julio/807-mcp-agnostico` (base `main` @ `d5a798b`), aprobado por
+`julio-qa`. No desplegado aún — pendiente `julio-release`.
+
+### Fixed
+
+- **GET /mcp/\<token\> devolvía 404**: la reescritura de path `/mcp/<token>` →
+  `/mcp` solo corría en la rama POST de `BearerMiddleware`. Ahora GET y POST
+  comparten un único pipeline de autenticación (ADR-018).
+- **GET /mcp sin token pasaba sin autenticar**: cualquier cliente podía leer
+  discovery/SSE sin Bearer/`X-Api-Key`. Cerrado por el mismo pipeline
+  unificado (ADR-018).
+- **Discovery GET perdido en el rescate de drift del 18-ago**: restaurado
+  por cherry-pick de `d0a2bfb` (mayo, soporte ChatGPT), ahora detrás de
+  autenticación — divergencia intencional respecto al original, que
+  respondía sin auth (ADR-020).
+- **Audit sin `client_type`/`user_agent` en eventos de éxito**: solo los
+  fallos de auth los grababan. Ahora todo evento (éxito y fallo) los lleva,
+  vía `ContextVar` compartido entre `BearerMiddleware` y `_audited()`
+  (ADR-022).
+
+### Added
+
+- `WWW-Authenticate: Bearer realm="odoo-mcp-v2", error="invalid_token"` en
+  todo `401` (GET y POST) — sin implementar OAuth completo ni
+  `/.well-known/*`, fuera de alcance (ADR-019).
+- CORS resuelto en la app: `OPTIONS /mcp/*` responde `2xx` sin exigir token;
+  las respuestas reales (GET/POST) llevan `Access-Control-Allow-Origin`
+  (ADR-021).
+- `scripts/rollback_check_local.py` — rollback de código probado en local
+  (worktree temporal, no toca VPS82) antes de redesplegar GREEN.
+- 12 tests nuevos (`test_mcp_auth_unification.py`,
+  `test_mcp_audit_client_type.py`, `test_mcp_regression_and_real_client.py`
+  con SDK oficial `mcp==1.27.1`) + regresión completa: 179 passed, 1 skipped.
+- ADR-018 a ADR-022.
+
+### Deuda declarada (no resuelta en este ticket)
+
+- **CORS sin allowlist de orígenes (ticket Odoo APL 867, vence antes de
+  servir cualquier cliente MCP de navegador):** `Access-Control-Allow-Origin`
+  refleja cualquier `Origin` del request sin compararlo contra una lista
+  permitida — verificado en `app/odoo_mcp_remote.py` y en
+  `tests/test_mcp_auth_unification.py`. Sin `Access-Control-Allow-Credentials`
+  no hay vector de robo de cookie de sesión, pero es superficie sin
+  allowlist. Riesgo aceptado temporalmente porque hoy ningún actor real
+  llama desde navegador (ver ADR-021, sección "Riesgo aceptado").
+- **Pipeline de auth "fantasma" (ticket Odoo 864):**
+  `AuthMiddleware.authenticate()`/`authorize_tool()` sigue sin usarse desde
+  el path vivo (cubierto solo por `test_auth_middleware.py`) — mismo estado
+  que antes de este ticket, consolidación fuera de alcance (ver ADR-018).
+
+---
+
 ## [0.4.5] — 2026-08-27 (ticket Odoo 737 — MCP alineado con la Guía APL 2.0 V2 v1.1)
 
 Cierre de 3 rondas de QA (`julio-qa`) sobre `feature/ticket-737-apl-v11` → `main`, commit `9ff29cf`.

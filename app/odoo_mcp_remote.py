@@ -31,9 +31,13 @@ from app.tools import discuss as D
 from app.tools import openai_compat as OC
 
 # ---------------------------------------------------------------------------
-# ContextVar: pasa el actor desde middleware a cada tool
+# ContextVar: pasa el actor y el cliente (client_type, user_agent) desde el
+# middleware a cada tool. _client_info es tuple (client_type, user_agent) —
+# ticket 807: antes solo los fallos de auth grababan client_type; los exitos
+# iban con null porque _audited() nunca lo tenia disponible.
 # ---------------------------------------------------------------------------
 _actor: ContextVar[Optional[ActorEntry]] = ContextVar('actor', default=None)
+_client_info: ContextVar[Optional[tuple[str, str]]] = ContextVar('client_info', default=None)
 
 # Globals inicializados en load() antes de arrancar uvicorn
 _registry: Optional[TokenRegistry] = None
@@ -58,15 +62,37 @@ _JSON_401 = (
     b'{"jsonrpc":"2.0","id":null,'
     b'"error":{"code":-32001,"message":"Unauthorized: invalid_token"}}'
 )
+# Discovery basico restaurado del commit d0a2bfb (12-may, soporte ChatGPT):
+# GET /mcp sin Accept: text/event-stream lo esperaba como 200 JSON, no 406.
+_JSON_DISCOVERY = (
+    b'{"jsonrpc":"2.0","result":{"name":"odoo-mcp-v2","version":"0.1.0"}}'
+)
+
+# CORS (ADR-021, ticket 807): en la app, no en Traefik. Bearer/X-Api-Key va en
+# header, no en cookie, asi que reflejar el origen no expone sesion alguna.
+# Acotado a los headers y metodos que el protocolo MCP realmente usa.
+_CORS_ALLOW_HEADERS = b'Authorization, Content-Type, X-Api-Key, Accept, Mcp-Session-Id, Mcp-Protocol-Version'
+_CORS_ALLOW_METHODS = b'GET, POST, OPTIONS'
 
 
 class BearerMiddleware:
     """Middleware ASGI mínimamente invasivo:
-    - GET /mcp: pasa directo a FastMCP (que maneja SSE o devuelve 406 si no es SSE,
-      tal como BLUE). NO intercepta para evitar romper el protocolo MCP estándar.
-    - POST /mcp: extrae token de Bearer, X-Api-Key o path opaco. Reescribe
-      /mcp/<token> → /mcp y autentica al actor. 401 si el token no es válido.
+    - OPTIONS /mcp*: preflight CORS, sin autenticar (el navegador no manda
+      Authorization en el preflight).
+    - GET y POST /mcp*: mismo pipeline de auth. Extrae token de Bearer,
+      X-Api-Key o path opaco. Reescribe /mcp/<token> → /mcp y autentica al
+      actor. 401 con WWW-Authenticate si el token no es válido.
+    - GET autenticado sin Accept: text/event-stream → discovery JSON.
+      Con SSE → pasa a FastMCP (Claude.ai abre el stream).
     - Resto de paths: pasa directo.
+
+    Nota historica (ticket 807): el 12-may (d0a2bfb) esta clase interceptaba
+    GET sin Accept: text/event-stream y devolvia el discovery JSON de abajo,
+    SIN pasar por autenticacion. El rescate de drift del 18-ago (3f9d55b) trajo
+    de prod una version que perdio ese handler — GET quedaba en manos de FastMCP,
+    que devuelve 404 para /mcp/<token> (la reescritura de path solo corria en la
+    rama POST) y ademas dejaba pasar GET /mcp sin token. Restaurado aqui y ahora
+    autenticado igual que POST (ADR-018).
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -84,47 +110,103 @@ class BearerMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # GET: pasar directo a FastMCP. Si Accept incluye text/event-stream,
-        # FastMCP abre SSE; si no, devuelve 406 (comportamiento estándar MCP).
-        if method == 'GET':
-            await self.app(scope, receive, send)
+        headers_raw = dict(scope.get('headers', []))
+        origin = headers_raw.get(b'origin') or b'*'
+
+        # OPTIONS: preflight CORS. El navegador no manda Authorization en el
+        # preflight, asi que responde antes de cualquier chequeo de token.
+        if method == 'OPTIONS':
+            await self._send_preflight(send, origin)
             return
 
-        # POST: requiere autenticacion.
-        headers_raw = dict(scope.get('headers', []))
+        # GET y POST comparten el mismo pipeline de autenticacion (ticket 807):
+        # antes solo POST autenticaba y reescribia /mcp/<token> → /mcp, dejando
+        # GET /mcp/<token> en 404 y GET /mcp sin token pasando sin auth.
         auth      = headers_raw.get(b'authorization', b'').decode()
         x_api_key = headers_raw.get(b'x-api-key', b'').decode()
         ua        = headers_raw.get(b'user-agent', b'').decode()
         token, src = AuthMiddleware.extract_token(auth, path, x_api_key)
         actor = _registry.verify(token) if _registry else None
+        client_type = AuthMiddleware.detect_client_type(ua, src)
 
         if not actor:
             if _mw:
                 _mw.audit.emit(
                     allowed=False,
                     denied_reason='invalid_token',
-                    client_type=AuthMiddleware.detect_client_type(ua, src),
+                    client_type=client_type,
+                    user_agent=ua or None,
                 )
-            await self._send_json(send, 401, _JSON_401)
+            await self._send_json(send, 401, _JSON_401, origin, www_authenticate=True)
             return
 
         # Si el token vino en el path (/mcp/<token>), reescribir → /mcp
-        # para que FastMCP lo procese en su endpoint registrado.
+        # para que FastMCP lo procese en su endpoint registrado. Aplica a
+        # GET y POST por igual (antes solo aplicaba a POST).
         if src == 'path' and path != '/mcp':
             scope = {**scope, 'path': '/mcp', 'raw_path': b'/mcp'}
 
-        tok = _actor.set(actor)
+        # GET autenticado sin Accept: text/event-stream — discovery, no SSE.
+        # Con SSE (Claude.ai) sigue a FastMCP para abrir el stream.
+        if method == 'GET':
+            accept = headers_raw.get(b'accept', b'').decode()
+            if 'text/event-stream' not in accept:
+                if _mw:
+                    _mw.audit.emit(
+                        actor=actor.actor, role=actor.role, tool='discovery',
+                        client_type=client_type, user_agent=ua or None,
+                        allowed=True,
+                    )
+                await self._send_json(send, 200, _JSON_DISCOVERY, origin)
+                return
+
+        tok_actor  = _actor.set(actor)
+        tok_client = _client_info.set((client_type, ua))
         try:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, self._cors_send(send, origin))
         finally:
-            _actor.reset(tok)
+            _actor.reset(tok_actor)
+            _client_info.reset(tok_client)
 
     @staticmethod
-    async def _send_json(send: Send, status: int, body: bytes) -> None:
-        await send({'type': 'http.response.start', 'status': status,
-                    'headers': [(b'content-type', b'application/json'),
-                                (b'content-length', str(len(body)).encode())]})
+    def _cors_send(send: Send, origin: bytes) -> Send:
+        """Envuelve send para inyectar Access-Control-Allow-Origin en la
+        respuesta real (no solo en el preflight), asi un cliente MCP desde
+        el navegador puede leerla."""
+        async def wrapped(message: dict) -> None:
+            if message['type'] == 'http.response.start':
+                headers = list(message.get('headers', []))
+                headers.append((b'access-control-allow-origin', origin))
+                headers.append((b'vary', b'Origin'))
+                message = {**message, 'headers': headers}
+            await send(message)
+        return wrapped
+
+    @staticmethod
+    async def _send_json(send: Send, status: int, body: bytes, origin: bytes,
+                          www_authenticate: bool = False) -> None:
+        headers = [(b'content-type', b'application/json'),
+                   (b'content-length', str(len(body)).encode()),
+                   (b'access-control-allow-origin', origin),
+                   (b'vary', b'Origin')]
+        if www_authenticate:
+            headers.append((b'www-authenticate',
+                             b'Bearer realm="odoo-mcp-v2", error="invalid_token"'))
+        await send({'type': 'http.response.start', 'status': status, 'headers': headers})
         await send({'type': 'http.response.body', 'body': body, 'more_body': False})
+
+    @staticmethod
+    async def _send_preflight(send: Send, origin: bytes) -> None:
+        headers = [
+            (b'access-control-allow-origin', origin),
+            (b'access-control-allow-methods', _CORS_ALLOW_METHODS),
+            (b'access-control-allow-headers', _CORS_ALLOW_HEADERS),
+            (b'access-control-max-age', b'86400'),
+            (b'content-length', b'0'),
+            (b'vary', b'Origin'),
+        ]
+        await send({'type': 'http.response.start', 'status': 204, 'headers': headers})
+        await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
 
 
 from app.auth_middleware import now_ms
@@ -144,8 +226,17 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
     donde el ContextVar si es accesible. No leer _actor.get() aqui: Starlette
     BaseHTTPMiddleware ejecuta call_next en un task group separado de anyio y
     la copia del ContextVar puede no propagarse a este scope.
+
+    client_type/user_agent (ticket 807) si se leen de _client_info aqui: a
+    diferencia de call_next de BaseHTTPMiddleware, BearerMiddleware es ASGI
+    puro y _audited() corre en la MISMA task que seteo el ContextVar (la
+    tool awaitea a _audited() en la misma expresion), no en un task group
+    aparte — por eso _a() ya confiaba en leer _actor.get() dentro de cada
+    tool y esto sigue el mismo patron.
     """
     start = now_ms()
+    ci = _client_info.get()
+    client_type, user_agent = ci if ci else (None, None)
     try:
         result = await coro
         if _mw and actor:
@@ -160,6 +251,8 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
             _mw.audit.emit(
                 actor=actor.actor,
                 role=actor.role,
+                client_type=client_type,
+                user_agent=user_agent,
                 tool=tool_name,
                 allowed=True,
                 latency_ms=now_ms() - start,
@@ -172,6 +265,8 @@ async def _audited(coro, tool_name: str, actor: Optional[ActorEntry] = None):
             _mw.audit.emit(
                 actor=actor.actor,
                 role=actor.role,
+                client_type=client_type,
+                user_agent=user_agent,
                 tool=tool_name,
                 allowed=not is_denied,
                 denied_reason=str(exc)[:120] if is_denied else None,
