@@ -6,10 +6,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 > `multiuser-v0.4.4` sin entrada aquí — historial real en `git log`/`git tag` y en `HANDOFF.md`
 > (Fase A "daily driver", 18-ago-2026). Este changelog retoma desde `0.4.5`.
 
-## [Unreleased] — ticket Odoo 807 (conector MCP agnóstico de LLM, retrocompat)
+## [multiuser-v0.4.6] — 2026-08-31 — ticket Odoo 807 (conector MCP agnóstico de LLM, retrocompat)
 
-Rama `julio/807-mcp-agnostico` (base `main` @ `d5a798b`), aprobado por
-`julio-qa`. No desplegado aún — pendiente `julio-release`.
+Rama `julio/807-mcp-agnostico` (base `main` @ `d5a798b`), aprobada por
+`julio-qa` y autorizada por `julio-release` el 31-ago-2026 (merge `c425c16`).
+Desplegada a VPS82 el 31-ago-2026 con gate de Willy.
 
 ### Fixed
 
