@@ -1,6 +1,7 @@
 # ADR-021 — CORS se resuelve en la app, no en Traefik
 
-**Estado:** Vigente, con riesgo aceptado TEMPORALMENTE (ticket 807, 31-ago-2026)
+**Estado:** Vigente. Riesgo aceptado temporal (ticket 807, 31-ago-2026)
+**remediado** por allowlist explícita de orígenes (ticket 867, 31-ago-2026).
 
 ## Contexto
 
@@ -29,34 +30,46 @@ realmente usa (`GET, POST, OPTIONS`; `Authorization, Content-Type,
 X-Api-Key, Accept, Mcp-Session-Id, Mcp-Protocol-Version`), no una
 allowlist abierta.
 
-## Riesgo aceptado (hallazgo de julio-qa)
+## Riesgo aceptado (hallazgo de julio-qa) — REMEDIADO (ticket 867, 31-ago-2026)
 
-`Access-Control-Allow-Origin` **no** está acotado: el código toma el
-`Origin` del request (`headers_raw.get(b'origin') or b'*'`) y lo refleja
-tal cual, sin compararlo contra ninguna allowlist de orígenes permitidos.
-Verificado contra el servidor real con un origen arbitrario no confiable
-(`https://claude.ai` en los tests, pero el código no distingue ese valor
-de cualquier otro `Origin` que llegue — no hay lógica de comparación, solo
-eco): cualquier origen, hostil o no, recibe
+Al cierre del ticket 807, `Access-Control-Allow-Origin` **no** estaba
+acotado: el código tomaba el `Origin` del request
+(`headers_raw.get(b'origin') or b'*'`) y lo reflejaba tal cual, sin
+compararlo contra ninguna allowlist de orígenes permitidos. Verificado
+contra el servidor real con un origen arbitrario no confiable
+(`https://claude.ai` en los tests, pero el código no distinguía ese valor
+de cualquier otro `Origin` que llegara — no había lógica de comparación,
+solo eco): cualquier origen, hostil o no, recibía
 `Access-Control-Allow-Origin: <su-propio-origin>` de vuelta.
 
-Esto **no abre el vector clásico de robo de cookies de sesión**: la
+Esto **no abría el vector clásico de robo de cookies de sesión**: la
 autenticación es Bearer/`X-Api-Key` en header, nunca cookie, y la respuesta
 no lleva `Access-Control-Allow-Credentials: true` — un script en un origen
-hostil no puede leer una sesión de navegador ajena porque no hay sesión de
-navegador que leer. Pero sí es superficie sin control: cualquier página
-web, si consigue o roba un token MCP válido por otra vía, podría llamar al
+hostil no podía leer una sesión de navegador ajena porque no había sesión de
+navegador que leer. Pero sí era superficie sin control: cualquier página
+web, si conseguía o robaba un token MCP válido por otra vía, podía llamar al
 conector desde el navegador de una víctima y leer la respuesta
-`fetch()`-eada, porque el origen nunca se valida.
+`fetch()`-eada, porque el origen nunca se validaba.
 
-**Riesgo aceptado TEMPORALMENTE.** Remediación: allowlist explícita de
-orígenes permitidos (reemplazar el eco por una comparación contra una
-lista en config, con `Access-Control-Allow-Origin` ausente o `null` para
-orígenes no listados) — ticket Odoo APL 867. Debe cerrarse **antes** de
-servir a cualquier cliente MCP real desde navegador; hoy los tres actores
-(Willy/Claude, Willy/ChatGPT, automatizaciones) no llaman desde un
-navegador, por eso el riesgo se acepta para este cierre y no bloquea el
-ticket 807.
+**Remediado en el ticket 867 (31-ago-2026).** `BearerMiddleware`
+(`app/odoo_mcp_remote.py::_resolve_cors_origin`) ahora compara el `Origin`
+recibido contra `ALLOWED_ORIGINS` — fuente única en
+`app/cors_config.py`/`config/cors_allowlist.yaml`, arrancada con
+`https://claude.ai` y `https://chatgpt.com`:
+
+- Origen en la allowlist → se refleja, igual que antes, pero solo para
+  estos orígenes.
+- Origen **no** listado (hostil o no) → la respuesta se sirve igual (no
+  hay `403`; el servidor no puede distinguir un navegador de un script),
+  pero **sin ninguna cabecera CORS** — un navegador del origen no listado
+  no puede leerla vía `fetch()`/`XHR`.
+- Sin header `Origin` (CLI/curl, el camino de Willy) → comportamiento
+  idéntico al anterior a este ticket (`Access-Control-Allow-Origin: *`):
+  no hay navegador de por medio, así que no hay allowlist que aplicar.
+
+Cubierto por `tests/test_cors_allowlist.py` (allowlist unitaria +
+integración contra el servidor real: origen listado, origen hostil,
+ausencia de `Origin`).
 
 ## Consecuencias
 
@@ -64,14 +77,16 @@ ticket 807.
   `Access-Control-Allow-Methods/Headers` acotados. Cubierto por
   `test_options_responde_2xx_con_cors`, `test_options_sin_token_no_requiere_auth`.
 - La respuesta real (`GET`/`POST`) también lleva
-  `Access-Control-Allow-Origin`, no solo el preflight. Cubierto por
+  `Access-Control-Allow-Origin` cuando el origen está en la allowlist, no
+  solo el preflight. Cubierto por
   `test_respuesta_real_lleva_access_control_allow_origin`.
-- `Access-Control-Allow-Origin` refleja cualquier origen sin allowlist —
-  ver "Riesgo aceptado" arriba. Ticket 867 (vence antes de exponer un
-  cliente de navegador) es dueño de cerrarlo.
+- `Access-Control-Allow-Origin` ya **no** refleja cualquier origen: solo
+  los de `config/cors_allowlist.yaml` (ticket 867, remediado — ver arriba).
 - CORS queda acoplado al ciclo de deploy de la app (rebuild+redeploy),
   no editable en caliente en Traefik — misma disciplina que el resto del
-  código versionado.
+  código versionado. La allowlist de orígenes sigue el mismo patrón:
+  fichero en `config/` horneado en la imagen, `CORS_ALLOWLIST_PATH` solo
+  para overrides de test/desarrollo (igual que `APL_LABELS_PATH`).
 
 ## Alternativas descartadas
 

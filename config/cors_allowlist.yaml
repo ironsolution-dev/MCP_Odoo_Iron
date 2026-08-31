@@ -1,0 +1,11 @@
+version: 1
+
+# Fuente unica de origenes CORS permitidos (ticket 867, ADR-021 remediado).
+# Un origen que NO esta en esta lista no recibe ninguna cabecera CORS —
+# la respuesta se sirve igual (no hay 403), pero el navegador del origen
+# hostil no puede leerla via fetch()/XHR. Ausencia de Origin (curl/CLI,
+# el camino de Willy) sigue el comportamiento historico: no compara contra
+# esta lista.
+allowed_origins:
+  - https://claude.ai
+  - https://chatgpt.com
