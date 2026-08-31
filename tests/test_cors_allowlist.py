@@ -143,6 +143,52 @@ async def test_origen_hostil_401_tambien_sin_reflejo(mcp_live):
     assert "access-control-allow-origin" not in r.headers
 
 
+# ---------------------------------------------------------------------------
+# Ronda 867b (QA, 31-ago-2026): variantes adversarias verificadas a mano
+# contra el servidor real. El match hoy es IGUALDAD EXACTA sobre un
+# frozenset de strings (`app/cors_config.ALLOWED_ORIGINS`) -- sin
+# `.lower()`, sin parseo de esquema/host/puerto, sin match por
+# prefijo/sufijo. Estas 5 variantes "parecen claude.ai pero no lo son"
+# deben tratarse EXACTO igual que un origen hostil arbitrario: si alguien
+# normaliza el origen o mete un match parcial manana, este test lo revienta.
+# ---------------------------------------------------------------------------
+ADVERSARIAL_ORIGINS = [
+    pytest.param("https://claude.ai.evil.com", id="subdominio-trampa"),
+    pytest.param("https://claude.ai:443", id="puerto-explicito"),
+    pytest.param("http://claude.ai", id="esquema-degradado-http"),
+    pytest.param("HTTPS://CLAUDE.AI", id="mayusculas"),
+    pytest.param("null", id="origin-null"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("adversarial_origin", ADVERSARIAL_ORIGINS)
+async def test_origen_adversario_variante_de_claude_ai_sin_reflejo(mcp_live, adversarial_origin):
+    """Ninguna de estas 5 variantes esta en `ALLOWED_ORIGINS` como string
+    exacto, asi que ninguna debe recibir `Access-Control-Allow-Origin` --
+    igual que `HOSTILE_ORIGIN` en los tests de arriba."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{mcp_live.url}/mcp/{mcp_live.token}",
+                              headers={"Accept": "application/json",
+                                       "Origin": adversarial_origin})
+    assert r.status_code == 200
+    assert "access-control-allow-origin" not in r.headers
+
+
+@pytest.mark.asyncio
+async def test_origen_exacto_claude_ai_contraste_con_los_adversarios(mcp_live):
+    """Caso positivo de contraste (ronda 867b): SOLO el string exacto
+    `https://claude.ai` -- sin subdominio, sin puerto, sin degradar a
+    http, en minusculas -- esta en la allowlist y se refleja. Fija el
+    contrato frente a `test_origen_adversario_variante_de_claude_ai_sin_reflejo`:
+    igualdad exacta, no normalizacion ni match parcial."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{mcp_live.url}/mcp/{mcp_live.token}",
+                              headers={"Accept": "application/json",
+                                       "Origin": "https://claude.ai"})
+    assert r.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+
 @pytest.mark.asyncio
 async def test_sin_header_origin_identico_al_comportamiento_anterior(mcp_live):
     """Regresion critica (ticket 867): CLI/curl -- el camino de Willy -- no

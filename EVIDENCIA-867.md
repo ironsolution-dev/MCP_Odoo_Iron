@@ -140,6 +140,46 @@ mecanismo nuevo documentado y referencia a `tests/test_cors_allowlist.py`.
 explícita de orígenes CORS)` agregada **antes** de la entrada sellada
 `[multiuser-v0.4.6]`, sin tocarla.
 
+## Ronda 867b (QA aprobó el 867; observación convertida en ronda obligatoria)
+
+QA aprobó los 6 criterios con evidencia en vivo, pero señaló que los 11
+tests originales no cubrían las variantes adversarias que verificó a mano
+contra el servidor real: el match de `_resolve_cors_origin` es **igualdad
+exacta** sobre un `frozenset` de strings, y ningún test lo fijaba como
+contrato explícito. Si mañana alguien "normaliza" el origen con `.lower()`
+o mete un match por prefijo/sufijo, ningún test de la ronda original lo
+hubiera detectado.
+
+**No se tocó código de producción** — solo `tests/test_cors_allowlist.py`.
+
+```
+$ .venv/bin/python -m pytest tests/test_cors_allowlist.py -v
+...
+tests/test_cors_allowlist.py::test_origen_adversario_variante_de_claude_ai_sin_reflejo[subdominio-trampa] PASSED
+tests/test_cors_allowlist.py::test_origen_adversario_variante_de_claude_ai_sin_reflejo[puerto-explicito] PASSED
+tests/test_cors_allowlist.py::test_origen_adversario_variante_de_claude_ai_sin_reflejo[esquema-degradado-http] PASSED
+tests/test_cors_allowlist.py::test_origen_adversario_variante_de_claude_ai_sin_reflejo[mayusculas] PASSED
+tests/test_cors_allowlist.py::test_origen_adversario_variante_de_claude_ai_sin_reflejo[origin-null] PASSED
+tests/test_cors_allowlist.py::test_origen_exacto_claude_ai_contraste_con_los_adversarios PASSED
+...
+17 passed, 1 warning in 0.74s
+```
+
+5 variantes adversarias añadidas (`https://claude.ai.evil.com`,
+`https://claude.ai:443`, `http://claude.ai`, `HTTPS://CLAUDE.AI`,
+`Origin: null`) — las 5 reciben respuesta `200` **sin**
+`access-control-allow-origin`, igual que `HOSTILE_ORIGIN`. Más el caso
+positivo de contraste: `https://claude.ai` exacto sigue reflejándose.
+
+```
+$ .venv/bin/python -m pytest tests/ -q
+...
+196 passed, 1 skipped, 1 warning in 2.40s
+```
+
+Mismo skip preexistente y ajeno (`test_blue_intact.py`, sin red a BLUE).
+190 → 196 passed: los 6 tests nuevos de la ronda 867b, cero regresiones.
+
 ## Pendientes / limitaciones conocidas
 
 - La allowlist arranca con solo 2 orígenes (`claude.ai`, `chatgpt.com`)
