@@ -6,6 +6,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 > `multiuser-v0.4.4` sin entrada aquí — historial real en `git log`/`git tag` y en `HANDOFF.md`
 > (Fase A "daily driver", 18-ago-2026). Este changelog retoma desde `0.4.5`.
 
+## [Unreleased] — ticket Odoo 867 (allowlist explícita de orígenes CORS)
+
+Rama `julio/867-cors-allowlist` (base `main` @ `0242689`, tag `multiuser-v0.4.6`).
+
+### Security
+
+- **CORS ya no refleja cualquier `Origin`**: `BearerMiddleware` comparaba
+  cualquier origen recibido y lo devolvía tal cual en
+  `Access-Control-Allow-Origin`, sin allowlist (riesgo aceptado temporal,
+  ADR-021, hallado por `julio-qa` en el ticket 807 con un origen hostil).
+  Ahora compara contra `ALLOWED_ORIGINS` — fuente única en
+  `app/cors_config.py` / `config/cors_allowlist.yaml`, arrancada con
+  `https://claude.ai` y `https://chatgpt.com`. Origen no listado → la
+  respuesta se sirve igual (no hay `403`) pero sin ninguna cabecera CORS.
+  Sin header `Origin` (CLI/curl) → comportamiento idéntico al anterior
+  (`Access-Control-Allow-Origin: *`), regresión verificada explícitamente.
+  ADR-021 actualizado a "remediado". Ver `tests/test_cors_allowlist.py`.
+
 ## [multiuser-v0.4.6] — 2026-08-31 — ticket Odoo 807 (conector MCP agnóstico de LLM, retrocompat)
 
 Rama `julio/807-mcp-agnostico` (base `main` @ `d5a798b`), aprobada por

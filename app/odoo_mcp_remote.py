@@ -19,6 +19,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.audit import Audit
 from app.auth_middleware import AuthMiddleware
+from app.cors_config import ALLOWED_ORIGINS
 from app.credentials_resolver import CredentialsResolver
 from app.odoo_client import OdooClient
 from app.policy_engine import PolicyEngine
@@ -68,9 +69,13 @@ _JSON_DISCOVERY = (
     b'{"jsonrpc":"2.0","result":{"name":"odoo-mcp-v2","version":"0.1.0"}}'
 )
 
-# CORS (ADR-021, ticket 807): en la app, no en Traefik. Bearer/X-Api-Key va en
-# header, no en cookie, asi que reflejar el origen no expone sesion alguna.
-# Acotado a los headers y metodos que el protocolo MCP realmente usa.
+# CORS (ADR-021, ticket 807/867): en la app, no en Traefik. Bearer/X-Api-Key
+# va en header, no en cookie, asi que reflejar un origen permitido no expone
+# sesion alguna. Acotado a los headers y metodos que el protocolo MCP
+# realmente usa. El ORIGEN en si se compara contra `ALLOWED_ORIGINS`
+# (app/cors_config.py, fuente unica) desde el ticket 867 — antes se
+# reflejaba cualquier Origin sin comparar (riesgo aceptado temporal en
+# ADR-021, ya remediado).
 _CORS_ALLOW_HEADERS = b'Authorization, Content-Type, X-Api-Key, Accept, Mcp-Session-Id, Mcp-Protocol-Version'
 _CORS_ALLOW_METHODS = b'GET, POST, OPTIONS'
 
@@ -111,7 +116,7 @@ class BearerMiddleware:
             return
 
         headers_raw = dict(scope.get('headers', []))
-        origin = headers_raw.get(b'origin') or b'*'
+        origin = self._resolve_cors_origin(headers_raw.get(b'origin'))
 
         # OPTIONS: preflight CORS. El navegador no manda Authorization en el
         # preflight, asi que responde antes de cualquier chequeo de token.
@@ -169,12 +174,36 @@ class BearerMiddleware:
             _client_info.reset(tok_client)
 
     @staticmethod
-    def _cors_send(send: Send, origin: bytes) -> Send:
+    def _resolve_cors_origin(origin_header: Optional[bytes]) -> Optional[bytes]:
+        """Ticket 867: compara el `Origin` recibido contra la allowlist
+        (`app/cors_config.ALLOWED_ORIGINS`, fuente unica) en vez de
+        reflejarlo tal cual (ADR-021, riesgo aceptado temporal ya
+        remediado).
+
+        - Sin header `Origin` (CLI/curl — el camino de Willy): `b'*'`,
+          identico al comportamiento anterior a este ticket. No hay
+          navegador de por medio, asi que no hay allowlist que aplicar.
+        - Header `Origin` presente y en la allowlist: se refleja tal cual
+          (igual que antes, pero solo para estos origenes).
+        - Header `Origin` presente y NO listado: `None` — el llamador NO
+          debe emitir ninguna cabecera CORS. La respuesta se sirve igual
+          (no es un 403); el navegador del origen no listado simplemente
+          no puede leerla via fetch()/XHR.
+        """
+        if origin_header is None:
+            return b'*'
+        if origin_header.decode('latin-1') in ALLOWED_ORIGINS:
+            return origin_header
+        return None
+
+    @staticmethod
+    def _cors_send(send: Send, origin: Optional[bytes]) -> Send:
         """Envuelve send para inyectar Access-Control-Allow-Origin en la
         respuesta real (no solo en el preflight), asi un cliente MCP desde
-        el navegador puede leerla."""
+        el navegador puede leerla. `origin=None` (origen no listado, ticket
+        867) no agrega ninguna cabecera CORS."""
         async def wrapped(message: dict) -> None:
-            if message['type'] == 'http.response.start':
+            if message['type'] == 'http.response.start' and origin is not None:
                 headers = list(message.get('headers', []))
                 headers.append((b'access-control-allow-origin', origin))
                 headers.append((b'vary', b'Origin'))
@@ -183,12 +212,13 @@ class BearerMiddleware:
         return wrapped
 
     @staticmethod
-    async def _send_json(send: Send, status: int, body: bytes, origin: bytes,
+    async def _send_json(send: Send, status: int, body: bytes, origin: Optional[bytes],
                           www_authenticate: bool = False) -> None:
         headers = [(b'content-type', b'application/json'),
-                   (b'content-length', str(len(body)).encode()),
-                   (b'access-control-allow-origin', origin),
-                   (b'vary', b'Origin')]
+                   (b'content-length', str(len(body)).encode())]
+        if origin is not None:
+            headers.append((b'access-control-allow-origin', origin))
+            headers.append((b'vary', b'Origin'))
         if www_authenticate:
             headers.append((b'www-authenticate',
                              b'Bearer realm="odoo-mcp-v2", error="invalid_token"'))
@@ -196,15 +226,17 @@ class BearerMiddleware:
         await send({'type': 'http.response.body', 'body': body, 'more_body': False})
 
     @staticmethod
-    async def _send_preflight(send: Send, origin: bytes) -> None:
-        headers = [
-            (b'access-control-allow-origin', origin),
-            (b'access-control-allow-methods', _CORS_ALLOW_METHODS),
-            (b'access-control-allow-headers', _CORS_ALLOW_HEADERS),
-            (b'access-control-max-age', b'86400'),
-            (b'content-length', b'0'),
-            (b'vary', b'Origin'),
-        ]
+    async def _send_preflight(send: Send, origin: Optional[bytes]) -> None:
+        headers = []
+        if origin is not None:
+            headers.extend([
+                (b'access-control-allow-origin', origin),
+                (b'access-control-allow-methods', _CORS_ALLOW_METHODS),
+                (b'access-control-allow-headers', _CORS_ALLOW_HEADERS),
+                (b'access-control-max-age', b'86400'),
+                (b'vary', b'Origin'),
+            ])
+        headers.append((b'content-length', b'0'))
         await send({'type': 'http.response.start', 'status': 204, 'headers': headers})
         await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
 
