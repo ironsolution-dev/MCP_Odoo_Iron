@@ -33,7 +33,7 @@ JuliO I/O — fábrica técnica IronSolution. Modo refactor incremental Blue/Gre
 
 ### Excepción declarada: `app/tools/tasks.py` (ticket 737, ronda 2, hallazgo F4)
 
-`app/tools/tasks.py` quedó en 314 líneas tras fusionar el rescate de
+`app/tools/tasks.py` quedó en 314 líneas (322 tras R-08) tras fusionar el rescate de
 `extract_write_id` (F1) + el contrato APL 2.0 (`parse_and_validate_apl_task_input`,
 `tag_ids`, `priority_star`) en `odoo_create_my_todo_apl` /
 `odoo_create_project_task_apl`. `app/schemas.py` (que también superaba las
@@ -49,6 +49,7 @@ lectura/escritura (`task_reads.py`/`task_writes.py`) exigía tocar el
 registro de tools en `app/tools/__init__.py` y las policies por actor
 (`allowed_tools`) para un archivo que está 14 líneas (4.6%) sobre el
 límite — riesgo desproporcionado al beneficio para un hallazgo MENOR.
+R-08 (15-nov-2026) añadió la guarda de fechas a `odoo_update_task_apl`; no es una tool nueva.
 Deuda declarada: si `tasks.py` gana otra tool de escritura, se revisita
 el split lectura/escritura en un ticket aparte.
 

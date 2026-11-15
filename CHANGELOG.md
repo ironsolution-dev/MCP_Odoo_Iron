@@ -2,6 +2,28 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [multiuser-v0.4.7] — 2026-11-15 — ley de fechas (SPEC-127, R-08)
+
+Rama `julio/r08-deadline-lock` (base `multiuser-v0.4.5` @ `9ff29cf`, el commit
+que corre en produccion segun la lectura de VPS82 del 15-nov-2026).
+
+### Changed
+
+- **El conector ya no mueve una fecha limite que existe** (ley de fechas de
+  Willy, 15-nov-2026): `odoo_update_task_apl`, `update_task` y
+  `search()` con `{"action":"update_task"}` rechazan `date_deadline` (y su
+  alias `deadline`) si la tarea ya tiene fecha. Se rechaza la llamada entera,
+  sin escribir nada, con `DeadlineLockedError` (`deadline_locked:task:<id>`),
+  que queda en la auditoria como denegado. Poner la primera fecha a una tarea
+  sin fecha y crear tareas con fecha siguen permitidos (LF-03 = A).
+- Por `search()` el rechazo llega como `error:deadline_locked`.
+- Help de escritura, docstrings e `instructions` ya no ofrecen mover la fecha.
+
+### Added
+
+- `tests/test_deadline_law.py` (T-R08-01..14) y `scripts/mutantes_r08.py`
+  (M-R08-01..11).
+
 ## [0.2.0] — 2026-05-12 (deploy en produccion + QA parcial Willy/Claude.ai)
 
 ### Fixed
