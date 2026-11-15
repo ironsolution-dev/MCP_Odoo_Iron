@@ -61,10 +61,28 @@ MUTANTES = [
 ]
 
 
-def pytest_rc(work: Path) -> int:
-    r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", *TESTS],
-                       cwd=work, capture_output=True, text=True)
-    return r.returncode
+# Test esperado por mutante (expresion -k): el mutante debe morir AHI, no solo
+# dar rc distinto de 0 (un NameError de coleccion no cuenta).
+ESPERADO = {
+    "M-R08-01": "t01",
+    "M-R08-02": "t02",
+    "M-R08-03": "t01 or t13",
+    "M-R08-04": "t05 or t13",
+    "M-R08-05": "t01",
+    "M-R08-06": "t07",
+    "M-R08-07": "t08 or t10",
+    "M-R08-08": "t10",
+    "M-R08-09": "t01 or t10",
+    "M-R08-10": "t03",
+    "M-R08-11": "t14",
+}
+
+
+def pytest_run(work: Path, k: str | None = None) -> subprocess.CompletedProcess:
+    cmd = [sys.executable, "-m", "pytest", "-q", "-rf", *TESTS]
+    if k:
+        cmd += ["-k", k]
+    return subprocess.run(cmd, cwd=work, capture_output=True, text=True)
 
 
 def fresh_copy() -> Path:
@@ -90,7 +108,7 @@ def aplicar(work: Path, nombre: str, fichero: str, a: str, b: str) -> None:
 def main() -> int:
     work = fresh_copy()
     try:
-        if pytest_rc(work) != 0:
+        if pytest_run(work).returncode != 0:
             print("FALLA original")
             return 1
         print("ok original")
@@ -101,10 +119,14 @@ def main() -> int:
         work = fresh_copy()
         try:
             aplicar(work, nombre, fichero, a, b)
-            if pytest_rc(work) != 0:
-                print(f"muere {nombre}")
+            k = ESPERADO[nombre.split()[0]]
+            r = pytest_run(work, k)
+            fallos = [ln.split("::")[-1].split(" ")[0] for ln in r.stdout.splitlines()
+                      if ln.startswith("FAILED")]
+            if r.returncode == 1 and fallos:
+                print(f"muere {nombre} en {', '.join(fallos)} (-k '{k}')")
             else:
-                print(f"VIVE  {nombre}")
+                print(f"VIVE  {nombre} (-k '{k}', rc={r.returncode})")
                 vivos += 1
         finally:
             shutil.rmtree(work, ignore_errors=True)

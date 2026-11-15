@@ -9,6 +9,11 @@ que corre en produccion segun la lectura de VPS82 del 15-nov-2026).
 
 ### Changed
 
+- **Aviso de versiones:** multiuser-v0.4.7 parte de multiuser-v0.4.5 (lo que
+  corre hoy) y NO incluye multiuser-v0.4.6 (ticket 807). Desplegar v0.4.6 o
+  cualquier version sin esta guarda quita el bloqueo de fechas. Tras cada
+  despliegue, comprobar que `app/tools/tasks.py` contiene
+  `ensure_deadline_not_moved(`.
 - **El conector ya no mueve una fecha limite que existe** (ley de fechas de
   Willy, 15-nov-2026): `odoo_update_task_apl`, `update_task` y
   `search()` con `{"action":"update_task"}` rechazan `date_deadline` (y su
