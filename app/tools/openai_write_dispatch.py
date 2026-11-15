@@ -17,6 +17,7 @@ import re
 from typing import Optional
 
 from app.odoo_client import OdooClient
+from app.schemas import DeadlineLockedError
 from app.policy_engine import PolicyEngine
 from app.token_registry import ActorEntry
 from app.tools import system as sys_tools
@@ -115,9 +116,11 @@ def _help_write_response() -> dict:
         "en la respuesta (nunca crea etiquetas nuevas). El formato de titulo "
         "con prefijos entre corchetes de version anterior sigue aceptandose "
         "y se normaliza automaticamente.\n\n"
-        "Actualizar campos de tarea (acepta alias deadline->date_deadline; "
-        "NO enviar los dos a la vez; project_id NO va aqui, usa move_task_to_project):\n"
-        '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"...","deadline":"YYYY-MM-DD"}}\n\n'
+        "Actualizar campos de tarea (project_id NO va aqui, usa move_task_to_project; "
+        "deadline/date_deadline SOLO para poner la primera fecha a una tarea sin fecha: "
+        "una fecha existente no se mueve por este conector, usa ley_fechas.py o la "
+        "herramienta de reprogramar con nota):\n"
+        '{"action":"update_task","id":"task:<N>","changes":{"priority":"1","name":"..."}}\n\n'
         "Mover tarea a otra etapa:\n"
         '{"action":"move_task","id":"task:<N>","stage_id":<int>}\n\n'
         "Mover tarea a OTRO PROYECTO (distinto de cambiar etapa):\n"
@@ -250,6 +253,8 @@ async def _execute_action(payload: dict, actor: ActorEntry, odoo: OdooClient,
             f"tipo invalido: {exc}",
             kind="error:invalid_value",
         )
+    except DeadlineLockedError as exc:
+        return _action_error(str(exc), kind="error:deadline_locked")
     except PermissionError as exc:
         return _action_error(
             f"acceso denegado: {exc}",

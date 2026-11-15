@@ -47,6 +47,8 @@ def validate_calendar_event_dates(start: str, stop: str) -> None:
 # de validar. `project_id` esta deliberadamente BLOQUEADO aqui: reasignar
 # proyecto es una operacion con verificacion de visibilidad propia
 # (odoo_move_task_to_project, sec G1), no un campo mas del update generico.
+# date_deadline solo se escribe si la tarea no tiene fecha: ver
+# ensure_deadline_not_moved (ley de fechas, 15-nov-2026).
 # ---------------------------------------------------------------------------
 
 # alias humano -> campo real de Odoo.
@@ -61,6 +63,24 @@ _MOVE_TASK_POINTER = (
     "Para mover una tarea a otro proyecto usa la tool odoo_move_task_to_project "
     "(o la accion move_task_to_project en el protocolo ChatGPT)."
 )
+
+DEADLINE_LAW_POINTER = (
+    "la tarea ya tiene fecha limite y la ley de fechas (15-nov-2026) no permite "
+    "moverla por este conector: usa ley_fechas.py o la herramienta de reprogramar con nota."
+)
+
+
+class DeadlineLockedError(PermissionError):
+    """Intento de mover un date_deadline existente por el conector (ley de fechas)."""
+
+
+def ensure_deadline_not_moved(task_id: int, current_deadline: object) -> None:
+    """Pura. current_deadline = valor leido de Odoo (False/None/'' si no hay fecha).
+
+    Con fecha previa lanza DeadlineLockedError; sin fecha no hace nada (LF-03 = A).
+    """
+    if current_deadline:
+        raise DeadlineLockedError(f"deadline_locked:task:{task_id}: {DEADLINE_LAW_POINTER}")
 
 
 @dataclass(frozen=True)

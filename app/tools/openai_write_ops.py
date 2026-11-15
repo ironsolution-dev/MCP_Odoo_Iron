@@ -94,7 +94,9 @@ async def update_task(actor: ActorEntry, odoo: OdooClient, policy: PolicyEngine,
     """Actualiza campos editables de una tarea. id puede ser `task:42` o `42`.
 
     Campos permitidos: name, description, priority, date_deadline (alias:
-    `deadline`), stage_id, tag_ids, user_ids. NO enviar `deadline` y
+    `deadline`; solo para poner la primera fecha; una fecha existente no se
+    mueve por aqui: usa ley_fechas.py o la herramienta de reprogramar con
+    nota), stage_id, tag_ids, user_ids. NO enviar `deadline` y
     `date_deadline` a la vez (ambiguo, se rechaza). `project_id` NO es
     editable aqui: usa move_task_to_project para reasignar proyecto.
     """

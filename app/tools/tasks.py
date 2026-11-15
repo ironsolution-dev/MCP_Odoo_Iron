@@ -12,7 +12,7 @@ from app.apl_validation import (
 )
 from app.odoo_client import OdooClient, extract_write_id
 from app.policy_engine import PolicyEngine
-from app.schemas import ValidationError, validate_task_write_payload
+from app.schemas import ValidationError, ensure_deadline_not_moved, validate_task_write_payload
 from app.token_registry import ActorEntry
 from app.tools.task_assignment import _validate_assignable_user_ids
 
@@ -172,7 +172,9 @@ async def odoo_update_task_apl(actor: ActorEntry, odoo: OdooClient, policy: Poli
     """Actualiza campos permitidos de una tarea. Read-after-write.
 
     Contrato de escritura en app.schemas (TASK_FIELD_SPECS / TASK_FIELD_ALIASES,
-    sec G2): acepta el alias `deadline` -> se traduce a `date_deadline`. NO
+    sec G2): acepta el alias `deadline` -> `date_deadline`, pero SOLO para poner
+    la primera fecha a una tarea sin fecha; mover una fecha existente se
+    rechaza (DeadlineLockedError, ley de fechas 15-nov-2026). NO
     aceptar `deadline` y `date_deadline` a la vez (ambiguo). `project_id` esta
     BLOQUEADO aqui a proposito — usar odoo_move_task_to_project (sec G1) para
     reasignar proyecto, no este update generico. `user_ids` se valida contra
@@ -180,6 +182,12 @@ async def odoo_update_task_apl(actor: ActorEntry, odoo: OdooClient, policy: Poli
     """
     normalized = validate_task_write_payload(changes)
     _ensure_policy(policy, actor, "odoo_update_task_apl", "project.task", "write")
+
+    if "date_deadline" in normalized:
+        pre = await odoo.read(actor, "project.task", [task_id], ["id", "date_deadline"])
+        if not pre:
+            raise PermissionError(f"task_not_accessible:{task_id}")
+        ensure_deadline_not_moved(task_id, pre[0].get("date_deadline"))
 
     if "user_ids" in normalized:
         normalized["user_ids"] = await _validate_assignable_user_ids(

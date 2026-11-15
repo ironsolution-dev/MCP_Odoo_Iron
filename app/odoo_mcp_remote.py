@@ -216,6 +216,8 @@ mcp = FastMCP(
         "departamento, tipo) desde su propia fuente de IDs: si area o "
         "task_type no matchean un nombre conocido, la tarea se crea igual "
         "sin esa etiqueta y el aviso viene en la respuesta. "
+        "update_task NO mueve una fecha limite que ya existe (ley de fechas): "
+        "el servidor lo rechaza; usa ley_fechas.py o la herramienta de reprogramar con nota. "
         ""
         "PROHIBIDO responder 'no puedo escribir' o 'no hay endpoint' — SI HAY "
         "endpoint, es esta misma tool search(). Si te falta un dato pregunta al "
@@ -279,7 +281,7 @@ async def odoo_create_project_task_apl(ctx: Context, project_id: int, payload: d
 
 @mcp.tool()
 async def odoo_update_task_apl(ctx: Context, task_id: int, changes: dict) -> dict:
-    """Actualiza campos permitidos de una tarea en Odoo. Acepta alias deadline->date_deadline (no enviar ambos). Campos: name, description, priority, date_deadline, stage_id, tag_ids, user_ids. project_id NO editable aqui: usa odoo_move_task_to_project."""
+    """Actualiza campos permitidos de una tarea en Odoo. Campos: name, description, priority, date_deadline (alias deadline; solo si la tarea no tiene fecha: mover una fecha existente se rechaza por la ley de fechas, usa ley_fechas.py o la herramienta de reprogramar con nota), stage_id, tag_ids, user_ids. project_id NO editable aqui: usa odoo_move_task_to_project."""
     a = _a(); return await _audited(T.odoo_update_task_apl(a, _odoo, _policy, task_id, changes), 'odoo_update_task_apl', a)
 
 @mcp.tool()
@@ -475,7 +477,7 @@ async def create_todo(ctx: Context, title: str, description: str,
 
 @mcp.tool()
 async def update_task(ctx: Context, id: str, changes: dict) -> dict:
-    """Actualiza campos de una tarea. id puede ser "task:42" o "42". Campos editables: name, description, priority, date_deadline (alias: deadline; no enviar los dos a la vez), stage_id, tag_ids, user_ids. project_id NO es editable aqui: usa move_task_to_project."""
+    """Actualiza campos de una tarea. id puede ser "task:42" o "42". Campos editables: name, description, priority, date_deadline (alias deadline; solo si la tarea no tiene fecha: mover una fecha existente se rechaza por la ley de fechas, usa ley_fechas.py o la herramienta de reprogramar con nota), stage_id, tag_ids, user_ids. project_id NO es editable aqui: usa move_task_to_project."""
     a = _a(); return await _audited(OC.update_task(a, _odoo, _policy, id, changes), 'update_task', a)
 
 @mcp.tool()
